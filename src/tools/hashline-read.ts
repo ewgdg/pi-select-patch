@@ -16,7 +16,7 @@ export const readTool = defineTool({
   description: "Read a UTF-8 text file as stable HASH│content lines; image files use Pi's built-in read behavior.",
   promptSnippet: "read returns text files as stable 4-character HASH│content rows for hash-only patching; images are returned by the built-in image reader.",
   promptGuidelines: [
-    "Use read before patch so patches can anchor on HASH│content rows.",
+    "Use read before patch only when you do not already know the needed current hashes.",
     "For text files, read output has no line numbers, duplicate counters, or fuzzy anchors.",
     "For image files, read delegates to Pi's built-in image handling instead of returning hashlines."
   ],
