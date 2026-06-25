@@ -20,7 +20,6 @@ export interface UpdateFileOperation {
 export interface DeleteFileOperation {
   kind: "delete";
   path: string;
-  patch: Patch;
 }
 
 export interface UniversalPatch {
@@ -65,17 +64,12 @@ export function parseUniversalPatch(patchText: string, hashFn: HashFunction = ha
   return { operations };
 }
 
-export function parsePatchInput(patchText: string, legacyPath?: string, hashFn: HashFunction = hashLine): UniversalPatch {
+export function parsePatchInput(patchText: string, hashFn: HashFunction = hashLine): UniversalPatch {
   const firstMeaningfulLine = splitPatchLines(patchText).find((line) => line.length > 0);
-  if (firstMeaningfulLine === "*** Begin Patch") {
-    return parseUniversalPatch(patchText, hashFn);
+  if (firstMeaningfulLine !== "*** Begin Patch") {
+    throw new InvalidPatchError("Patch must be a Codex-like universal patch starting with '*** Begin Patch'.");
   }
-  if (!legacyPath) {
-    throw new InvalidPatchError("Patch must be a universal patch with file headers when no path parameter is provided.");
-  }
-  return {
-    operations: [{ kind: "update", path: legacyPath, patch: parsePatch(patchText, hashFn) }]
-  };
+  return parseUniversalPatch(patchText, hashFn);
 }
 
 function parseSection(header: SectionHeader, body: readonly string[], hashFn: HashFunction): UniversalPatchOperation {
@@ -84,12 +78,12 @@ function parseSection(header: SectionHeader, body: readonly string[], hashFn: Ha
     return { kind: "add", path: header.path, lines, finalNewline: addFileRequiresFinalNewline(lines) };
   }
 
-  const patch = parsePatch(body.join("\n"), hashFn);
   if (header.kind === "delete") {
-    validateDeleteFilePatch(patch);
-    return { kind: "delete", path: header.path, patch };
+    validateDeleteFileBody(body);
+    return { kind: "delete", path: header.path };
   }
 
+  const patch = parsePatch(body.join("\n"), hashFn);
   return { kind: "update", path: header.path, patch };
 }
 
@@ -107,10 +101,9 @@ function addFileRequiresFinalNewline(lines: readonly string[]): boolean {
   return lines.at(-1) === "";
 }
 
-function validateDeleteFilePatch(patch: Patch): void {
-  const ops = patch.hunks.flatMap((hunk) => hunk.ops);
-  if (ops.length === 0 || ops.some((op) => op.kind !== "delete")) {
-    throw new InvalidPatchError("Delete File requires one or more delete-only hashline operations as full-file evidence.");
+function validateDeleteFileBody(body: readonly string[]): void {
+  if (body.length > 0) {
+    throw new InvalidPatchError("Delete File sections must not include hunks or body lines.");
   }
 }
 

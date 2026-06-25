@@ -21,12 +21,12 @@ Preferred `patch` input is Codex-like and carries file paths:
 *** Add File: new.txt
 +literal new file line
 *** Update File: existing.txt
-@@ @@
+@@
  HHHH
 -HHHH
 +literal inserted content
 *** Delete File: old.txt
-@@ @@
+@@
 -HHHH
 *** End Patch
 ```
@@ -51,7 +51,7 @@ Patch must start with `*** Begin Patch` and end with `*** End Patch`. One operat
 Update sections use hashline hunks:
 
 ```diff
-@@ @@
+@@
  HHHH
 -HHHH
 +literal inserted content
@@ -59,7 +59,7 @@ Update sections use hashline hunks:
 
 Rules:
 
-- Hunk header must be exactly `@@ @@`.
+- Hunk header must be exactly `@@`.
 - No source line numbers, ranges, duplicate counters, perfect hashes, or fuzzy anchors.
 - Operation prefixes: space = context, `-` = delete, `+` = insert.
 - Context/delete operations contain only a hash (` HHHH`, `-HHHH`). Insert operations contain literal content after `+`.
@@ -69,23 +69,13 @@ Rules:
 
 ## Delete File
 
-Delete sections use update-style hashline evidence but must be delete-only:
+Delete sections match Codex syntax and contain no body:
 
 ```diff
 *** Delete File: old.txt
-@@ @@
--HHHH
--HHHH
 ```
 
-Delete is a hard delete of the resolved regular file after validation. Validation requires:
-
-- Existing UTF-8 text file.
-- One or more delete-only hashline operations.
-- Delete evidence must cover complete current file content.
-- Empty files are not deleted because there is no hashline content evidence.
-
-Visible receipt for delete is header plus `Deleted file`; deleted content and deleted hashes are not visible.
+Delete is a hard delete of the resolved regular file after validation. Validation requires an existing UTF-8 text file. Visible receipt for delete is header plus `Deleted file`; deleted content is not visible.
 
 ## Success receipt
 

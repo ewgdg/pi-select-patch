@@ -51,15 +51,14 @@ export const patchTool = defineTool({
   promptGuidelines: [
     "Prefer universal patch input: '*** Begin Patch', one or more file operation headers, then '*** End Patch'.",
     "Add File body lines are literal new file content prefixed with '+'. Target file must not already exist. Visible receipt shows only '*** Add File: path' and '+HASH' rows.",
-    "Update File sections use '@@ @@' hunks. Context/delete lines are hash-only (' HHHH', '-HHHH'); insert lines are literal content ('+new text'). Do not paste HASH│content rows into patch operations.",
+    "Update File sections use Codex-style '@@' hunks. Context/delete lines are hash-only (' HHHH', '-HHHH'); insert lines are literal content ('+new text'). Do not paste HASH│content rows into patch operations.",
     "Update matching uses only context/delete hash sequences. Do not use line numbers, duplicate counters, fuzzy fallback, or legacy replace fields.",
-    "Delete File sections require delete-only hash lines proving the complete current file content. The tool hard-deletes the resolved regular file after validation; visible output exposes no deleted content.",
+    "Delete File sections match Codex behavior: use only the file header and no body. The tool hard-deletes the resolved regular file after validation; visible output exposes no deleted content.",
     "On success, visible output is a compact hash-only receipt/status. Full content diff is available only in details.diff for the host/UI."
   ],
   parameters: Type.Object(
     {
-      path: Type.Optional(Type.String({ description: "Legacy single-file target path; omit for universal patches with file headers." })),
-      patch: Type.String({ description: "Codex-like multi-file patch text; legacy @@ @@ single-file patch is accepted when path is provided." }),
+      patch: Type.String({ description: "Codex-like multi-file patch text." }),
       dry_run: Type.Optional(Type.Boolean({ description: "Validate/apply in memory and do not write." }))
     },
     { additionalProperties: false }
@@ -69,7 +68,7 @@ export const patchTool = defineTool({
       throw new Error("Cancelled");
     }
 
-    const universalPatch = parsePatchInput(params.patch, params.path);
+    const universalPatch = parsePatchInput(params.patch);
     const operationTargets = await prepareOperationTargets(ctx.cwd, universalPatch.operations);
     const queuePaths = operationTargets.map((target) => target.targetPath).sort();
 
@@ -159,14 +158,13 @@ async function planFileChanges(operationTargets: readonly OperationTarget[]): Pr
 
     await assertExistingTextFileMutationTarget(targetPath);
     const { text: oldText } = await readExistingTextFile(targetPath, { writable: true });
-    const applyResult = applyPatchToText(oldText, operation.patch);
 
     if (operation.kind === "delete") {
-      assertDeletePatchRemovesWholeFile(operation.path, oldText, applyResult);
-      plannedChanges.push({ operation: "delete", patchPath: operation.path, targetPath, oldText, newText: undefined, applyResult });
+      plannedChanges.push({ operation: "delete", patchPath: operation.path, targetPath, oldText, newText: undefined });
       continue;
     }
 
+    const applyResult = applyPatchToText(oldText, operation.patch);
     plannedChanges.push({ operation: "update", patchPath: operation.path, targetPath, oldText, newText: applyResult.text, applyResult });
   }
   return plannedChanges;
@@ -192,16 +190,6 @@ function serializeAddFileText(operation: AddFileOperation): string {
   });
 }
 
-function assertDeletePatchRemovesWholeFile(path: string, oldText: string, applyResult: ApplyPatchResult): void {
-  const oldLineCount = parseText(oldText).lines.length;
-  const deletedLineCount = applyResult.hunkAudits.reduce((count, audit) => count + audit.deletedHashes.length, 0);
-  if (oldLineCount === 0) {
-    throw new InvalidPatchError(`Delete File requires hashline evidence and cannot delete empty file without content evidence: ${path}`);
-  }
-  if (applyResult.text !== "" || deletedLineCount !== oldLineCount) {
-    throw new InvalidPatchError(`Delete File evidence must cover the complete current file: ${path}`);
-  }
-}
 
 function buildPatchReceiptDecision(plannedChanges: readonly PlannedFileChange[], dryRun: boolean): PatchReceiptDecision {
   const renderedReceipt = renderUniversalPatchReceipt(plannedChanges);

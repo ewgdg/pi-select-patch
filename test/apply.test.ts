@@ -8,7 +8,7 @@ import {
 } from "../src/api.js";
 
 const row = (prefix: " " | "-" | "+", content: string, hashFn = hashLine) => prefix === "+" ? `${prefix}${content}` : `${prefix}${hashFn(content)}`;
-const patch = (...lines: string[]) => ["@@ @@", ...lines].join("\n");
+const patch = (...lines: string[]) => ["@@", ...lines].join("\n");
 
 describe("applyPatchToText", () => {
   it("replaces one line with unique surrounding context", () => {
@@ -37,11 +37,11 @@ describe("applyPatchToText", () => {
   it("applies multiple hunks sequentially", () => {
     const text = "a\nb\nc";
     const multi = [
-      "@@ @@",
+      "@@",
       row(" ", "a"),
       row("-", "b"),
       row("+", "bb"),
-      "@@ @@",
+      "@@",
       row(" ", "bb"),
       row("+", "between"),
       row(" ", "c")
@@ -75,10 +75,10 @@ describe("applyPatchToText", () => {
 
   it("keeps apply transactional when later hunk fails", () => {
     const multi = [
-      "@@ @@",
+      "@@",
       row("-", "a"),
       row("+", "aa"),
-      "@@ @@",
+      "@@",
       row("-", "missing")
     ].join("\n");
     expect(() => applyPatchToText("a\nb", multi)).toThrow(StaleHunkError);

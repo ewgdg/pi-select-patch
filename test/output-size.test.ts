@@ -49,11 +49,11 @@ describe("tool output size guards", () => {
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
     const hugeReplacement = oversizedContent();
-    const diff = ["@@ @@", row("-", "old"), row("+", hugeReplacement)].join("\n");
+    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", hugeReplacement), "*** End Patch"].join("\n");
 
     const result = await patchTool.execute(
       "tool-call",
-      { path: "file.txt", patch: diff },
+      { patch: diff },
       undefined,
       undefined,
       { cwd: dir } as never
@@ -69,11 +69,11 @@ describe("tool output size guards", () => {
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
     const insertedRows = oneOverLineCap();
-    const diff = ["@@ @@", row("-", "old"), ...insertedRows.map((content) => row("+", content))].join("\n");
+    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), ...insertedRows.map((content) => row("+", content)), "*** End Patch"].join("\n");
 
     const result = await patchTool.execute(
       "tool-call",
-      { path: "file.txt", patch: diff },
+      { patch: diff },
       undefined,
       undefined,
       { cwd: dir } as never

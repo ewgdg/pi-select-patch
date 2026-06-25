@@ -33,7 +33,7 @@ Build fresh TypeScript `pi-hashline-patch` extension with stable 4-char hashline
 
 6. **Implement patch data types and parser**
    - File: `src/patch-format.ts`
-   - Changes: define `Patch`, `Hunk`, `PatchOp`; parse one single-file patch; allow optional `--- ...` and `+++ ...` headers; hunk header must be exactly `@@ @@`; context/delete op lines are hash-only (` HHHH`, `-HHHH`), insert op lines are literal content (`+new content`); reject multiple file sections, line-number hunk headers, bad hashes, malformed lines, and pasted `HASH│content` rows in patch operations.
+   - Changes: define `Patch`, `Hunk`, `PatchOp`; parse one single-file patch; allow optional `--- ...` and `+++ ...` headers; hunk header must be exactly `@@`; context/delete op lines are hash-only (` HHHH`, `-HHHH`), insert op lines are literal content (`+new content`); reject multiple file sections, line-number hunk headers, bad hashes, malformed lines, and pasted `HASH│content` rows in patch operations.
    - Acceptance: parser accepts hash-only unified shape and rejects `@@ -1,2 +1,2 @@`.
 
 7. **Implement named errors**
@@ -70,7 +70,7 @@ Build fresh TypeScript `pi-hashline-patch` extension with stable 4-char hashline
       ```ts
       Type.Object({
         path: Type.String({ description: "Existing target text file to patch." }),
-        patch: Type.String({ description: "Hash-only unified patch using @@ @@ hunks." }),
+        patch: Type.String({ description: "Hash-only unified patch using @@ hunks." }),
         dry_run: Type.Optional(Type.Boolean({ description: "Validate/apply in memory and do not write." }))
       }, { additionalProperties: false })
       ```
@@ -116,18 +116,18 @@ Build fresh TypeScript `pi-hashline-patch` extension with stable 4-char hashline
 ```diff
 --- a/path optional
 +++ b/path optional
-@@ @@
+@@
  HHHH
 -HHHH
 +inserted content
 ```
-- Hunk header exactly `@@ @@`; no line numbers, ranges, counters, or hash sequence duplication.
+- Hunk header exactly `@@`; no line numbers, ranges, counters, or hash sequence duplication.
 - Body defines match sequence: all context/deletion hashes in order; insertions excluded.
 - Context/delete rows contain only hashes; insert rows contain literal content. Insert rows that look like pasted `HASH│content` are rejected to avoid stale-anchor mistakes.
 
 ## Test Cases
 - Hash/read: same content same hash across positions; duplicates same hash; 4-char base64url; separator in content; empty line; Unicode; empty file; final newline preservation; CRLF preservation.
-- Patch parse: accept optional file headers; reject bad hash width/alphabet; reject pasted `HASH│content` in context/delete/insert operations; reject line-number hunk header.
+- Patch parse: reject file headers inside Update File sections; reject bad hash width/alphabet; reject pasted `HASH│content` in context/delete/insert operations; reject line-number hunk header.
 - Apply success: replace one line with unique context; delete with unique context; insert between context lines; multiple hunks sequential; duplicate line elsewhere OK when full sequence unique; insertion hash equals returned hash.
 - Apply stale: absent sequence; changed context hash; changed deletion hash; multi-hunk failure leaves original file unchanged.
 - Apply ambiguous: same match sequence twice; single duplicate deletion with no unique context; pure insertion into non-empty file rejected; mocked hash collision via injectable hash function.
@@ -145,7 +145,7 @@ pi -e ./src/index.ts
 Manual smoke after `pi -e`:
 1. Create temp existing text file.
 2. Invoke `read`.
-3. Build patch with `@@ @@` and ` HASH│...` / `-HASH│...` / `+HASH│...`.
+3. Build patch with `@@` and ` HASH│...` / `-HASH│...` / `+HASH│...`.
 4. Invoke `patch`.
 5. Confirm stdout is compact hash-only receipt and file content changed.
 6. Try stale and ambiguous fixtures; confirm file unchanged.

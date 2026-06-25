@@ -22,7 +22,7 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
   await writeFile(file, initialText);
   const result = await patchTool.execute(
     "tool-call",
-    { path, patch: diff },
+    { patch: diff.startsWith("*** Begin Patch") ? diff : ["*** Begin Patch", `*** Update File: ${path}`, diff, "*** End Patch"].join("\n") },
     undefined,
     undefined,
     { cwd: dir } as never
@@ -32,7 +32,7 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
 
 describe("patch visible receipt", () => {
   it("is agent-visible as patch and returns post-edit hash-only receipt without deleted hashes or file content", async () => {
-    const diff = ["@@ @@", row(" ", "a"), row("-", "old"), row("+", "new"), row(" ", "z")].join("\n");
+    const diff = ["@@", row(" ", "a"), row("-", "old"), row("+", "new"), row(" ", "z")].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
@@ -50,7 +50,7 @@ describe("patch visible receipt", () => {
     const universal = [
       "*** Begin Patch",
       "*** Update File: file.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "new"),
       "*** End Patch"
@@ -137,11 +137,11 @@ describe("patch visible receipt", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "first"),
       "*** Update File: ./a.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "second"),
       "*** End Patch"
@@ -158,11 +158,7 @@ describe("patch visible receipt", () => {
     const patch = [
       "*** Begin Patch",
       "*** Delete File: doomed.txt",
-      "@@ @@",
-      row("-", "bye"),
       "*** Delete File: ./doomed.txt",
-      "@@ @@",
-      row("-", "bye"),
       "*** End Patch"
     ].join("\n");
 
@@ -176,7 +172,7 @@ describe("patch visible receipt", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: one.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "new"),
       "*** Add File: missing-parent/two.txt",
@@ -195,8 +191,6 @@ describe("patch visible receipt", () => {
       "*** Add File: created.txt",
       "+new",
       "*** Delete File: missing.txt",
-      "@@ @@",
-      row("-", "gone"),
       "*** End Patch"
     ].join("\n");
 
@@ -210,7 +204,7 @@ describe("patch visible receipt", () => {
     const patch = [
       "*** Begin Patch",
       "*** Update File: one.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "new"),
       "*** Add File: two.txt",
@@ -226,16 +220,13 @@ describe("patch visible receipt", () => {
     await expect(readFile(join(dir, "two.txt"), "utf8")).resolves.toBe("second");
   });
 
-  it("hard-deletes a file only after complete delete-only hashline evidence", async () => {
+  it("hard-deletes a file with a Codex Delete File section", async () => {
     const dir = await makeTempDir();
     const target = join(dir, "doomed.txt");
     await writeFile(target, "a\nb");
     const patch = [
       "*** Begin Patch",
       "*** Delete File: doomed.txt",
-      "@@ @@",
-      row("-", "a"),
-      row("-", "b"),
       "*** End Patch"
     ].join("\n");
 
@@ -249,11 +240,11 @@ describe("patch visible receipt", () => {
     await expect(stat(target)).rejects.toThrow();
   });
 
-  it("rejects Delete File when evidence does not cover the whole file", async () => {
+  it("rejects Delete File sections with a body", async () => {
     const dir = await makeTempDir();
     const target = join(dir, "doomed.txt");
     await writeFile(target, "a\nb");
-    const patch = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@ @@", row("-", "a"), "*** End Patch"].join("\n");
+    const patch = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@", row("-", "a"), "*** End Patch"].join("\n");
 
     await expect(patchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never)).rejects.toThrow("[E_INVALID_PATCH]");
     await expect(readFile(target, "utf8")).resolves.toBe("a\nb");
@@ -264,7 +255,7 @@ describe("patch visible receipt", () => {
     const universal = [
       "*** Begin Patch",
       "*** Update File: file.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       ...manyLines.map((line) => row("+", line)),
       "*** End Patch"
@@ -278,7 +269,7 @@ describe("patch visible receipt", () => {
   });
 
   it("omits empty receipts and tells caller to use read", async () => {
-    const diff = ["@@ @@", row("-", "only")].join("\n");
+    const diff = ["@@", row("-", "only")].join("\n");
 
     const { file, result } = await patchFile("only", diff);
 

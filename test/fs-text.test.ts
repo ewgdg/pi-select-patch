@@ -45,9 +45,9 @@ describe("patch tool", () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
-    const diff = ["@@ @@", row("-", "old"), row("+", "new")].join("\n");
+    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
 
-    const result = await patchTool.execute("tool-call", { path: "file.txt", patch: diff, dry_run: true }, undefined, undefined, { cwd: dir } as never);
+    const result = await patchTool.execute("tool-call", { patch: diff, dry_run: true }, undefined, undefined, { cwd: dir } as never);
 
     const content = result.content[0];
     expect(content.type).toBe("text");
@@ -62,10 +62,10 @@ describe("patch tool", () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "actual");
-    const diff = ["@@ @@", row("-", "old"), row("+", "new")].join("\n");
+    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
 
     await expect(
-      patchTool.execute("tool-call", { path: "file.txt", patch: diff }, undefined, undefined, { cwd: dir } as never)
+      patchTool.execute("tool-call", { patch: diff }, undefined, undefined, { cwd: dir } as never)
     ).rejects.toThrow("[E_STALE_HUNK]");
     await expect(readFile(file, "utf8")).resolves.toBe("actual");
   });

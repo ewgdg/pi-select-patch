@@ -14,8 +14,6 @@ export interface Hunk {
 }
 
 export interface Patch {
-  oldFile?: string;
-  newFile?: string;
   hunks: Hunk[];
 }
 
@@ -28,47 +26,37 @@ const OP_KIND_BY_PREFIX: Record<string, PatchOpKind> = {
 export function parsePatch(patchText: string, hashFn: HashFunction = hashLine): Patch {
   const lines = splitPatchLines(patchText);
   let index = 0;
-  let oldFile: string | undefined;
-  let newFile: string | undefined;
   const hunks: Hunk[] = [];
 
   if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) {
     throw new InvalidPatchError("Patch is empty.");
   }
 
-  if (lines[index]?.startsWith("--- ")) {
-    oldFile = lines[index].slice(4);
-    index += 1;
-    if (!lines[index]?.startsWith("+++ ")) {
-      throw new InvalidPatchError("File header '---' must be followed by '+++'.");
-    }
-    newFile = lines[index].slice(4);
-    index += 1;
-  } else if (lines[index]?.startsWith("+++ ")) {
-    throw new InvalidPatchError("File header '+++' cannot appear before '---'.");
+  if (lines[index]?.startsWith("--- ") || lines[index]?.startsWith("+++ ")) {
+    throw new InvalidPatchError("File headers are not supported inside Codex-style Update File sections.");
   }
 
   while (index < lines.length) {
     const line = lines[index];
     if (line.startsWith("--- ") || line.startsWith("+++ ")) {
-      throw new InvalidPatchError("Multiple file sections are not supported.");
+      throw new InvalidPatchError("File headers are not supported inside Codex-style Update File sections.");
     }
-    if (line.startsWith("@@") && line !== "@@ @@") {
-      throw new InvalidPatchError("Hunk header must be exactly '@@ @@' with no line numbers.");
+    if (line.startsWith("@@") && line !== "@@") {
+      throw new InvalidPatchError("Hunk header must be exactly '@@' with no line numbers.");
     }
-    if (line !== "@@ @@") {
-      throw new InvalidPatchError(`Expected hunk header '@@ @@', got '${line}'.`);
+    if (line !== "@@") {
+      throw new InvalidPatchError(`Expected hunk header '@@', got '${line}'.`);
     }
     index += 1;
 
     const ops: PatchOp[] = [];
-    while (index < lines.length && lines[index] !== "@@ @@") {
+    while (index < lines.length && lines[index] !== "@@") {
       const opLine = lines[index];
       if (opLine.startsWith("--- ") || opLine.startsWith("+++ ")) {
-        throw new InvalidPatchError("Multiple file sections are not supported.");
+        throw new InvalidPatchError("File headers are not supported inside Codex-style Update File sections.");
       }
       if (opLine.startsWith("@@")) {
-        throw new InvalidPatchError("Hunk header must be exactly '@@ @@' with no line numbers.");
+        throw new InvalidPatchError("Hunk header must be exactly '@@' with no line numbers.");
       }
       ops.push(parsePatchOp(opLine, hashFn));
       index += 1;
@@ -84,7 +72,7 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine): 
     throw new InvalidPatchError("Patch must contain at least one hunk.");
   }
 
-  return { oldFile, newFile, hunks };
+  return { hunks };
 }
 
 function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {

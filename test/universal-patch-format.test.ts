@@ -11,12 +11,10 @@ describe("universal patch parser", () => {
       "+hello",
       "+world",
       "*** Update File: existing.txt",
-      "@@ @@",
+      "@@",
       row("-", "old"),
       row("+", "new"),
       "*** Delete File: doomed.txt",
-      "@@ @@",
-      row("-", "bye"),
       "*** End Patch"
     ].join("\n");
 
@@ -26,10 +24,8 @@ describe("universal patch parser", () => {
     expect(parsed.operations[0]).toMatchObject({ kind: "add", path: "added.txt", lines: ["hello", "world"] });
   });
 
-  it("retains legacy single-file @@ @@ patches when path is provided", () => {
-    const parsed = parsePatchInput(["@@ @@", row("-", "old"), row("+", "new")].join("\n"), "file.txt");
-    expect(parsed.operations).toHaveLength(1);
-    expect(parsed.operations[0]).toMatchObject({ kind: "update", path: "file.txt" });
+  it("rejects wrapper-less patches", () => {
+    expect(() => parsePatchInput(["@@", row("-", "old"), row("+", "new")].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects add body lines without Codex plus prefixes", () => {
@@ -37,8 +33,8 @@ describe("universal patch parser", () => {
     expect(() => parseUniversalPatch(patch)).toThrow("[E_INVALID_PATCH]");
   });
 
-  it("rejects delete sections without delete-only hashline evidence", () => {
-    const withContext = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@ @@", row(" ", "ctx"), "*** End Patch"].join("\n");
-    expect(() => parseUniversalPatch(withContext)).toThrow("[E_INVALID_PATCH]");
+  it("rejects delete sections with body lines", () => {
+    const withBody = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@", row(" ", "ctx"), "*** End Patch"].join("\n");
+    expect(() => parseUniversalPatch(withBody)).toThrow("[E_INVALID_PATCH]");
   });
 });

@@ -33,7 +33,6 @@ Input:
 ```ts
 {
   patch: string;
-  path?: string;    // legacy single-file @@ @@ patches only
   dry_run?: boolean;
 }
 ```
@@ -45,13 +44,11 @@ Preferred syntax is Codex-like universal patch text:
 *** Add File: new.txt
 +literal new file line
 *** Update File: existing.txt
-@@ @@
+@@
  HHHH
 -HHHH
 +literal inserted line
 *** Delete File: old.txt
-@@ @@
--HHHH
 *** End Patch
 ```
 
@@ -70,7 +67,7 @@ Success output is compact and model-visible: file operation headers plus hash-on
 Deleted file
 ```
 
-Delete File uses hard delete after validation. It requires delete-only hashline evidence covering the complete current file, so accidental partial delete is rejected. Deleted content is omitted from visible output; `details.diff` contains full content diff for UI/host.
+Delete File uses Codex behavior: the section contains only `*** Delete File: path`. It hard-deletes the resolved regular file after validation. Deleted content is omitted from visible output; `details.diff` contains full content diff for UI/host.
 
 ## Validate
 
