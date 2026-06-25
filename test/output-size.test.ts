@@ -59,7 +59,7 @@ describe("tool output size guards", () => {
       { cwd: dir } as never
     );
 
-    expect(resultText(result)).toBe(["@@ result", `+${hashLine(hugeReplacement)}`].join("\n"));
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "@@ result", `+${hashLine(hugeReplacement)}`].join("\n"));
     expect(resultText(result)).not.toContain(hugeReplacement);
     await expect(readFile(file, "utf8")).resolves.toBe(hugeReplacement);
   });

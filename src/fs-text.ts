@@ -65,22 +65,66 @@ export async function writeTextFileAtomically(path: string, text: string): Promi
   }
 
   // Always write the resolved target so editing a symlink updates its target, not the symlink inode.
-  const targetDirectory = dirname(realTargetPath);
-  const tempPath = resolve(targetDirectory, `.hashline-patch-${process.pid}-${randomUUID()}.tmp`);
+  await writeTextFileViaTemp(realTargetPath, text, existingStats.mode & 0o777);
+}
 
-  try {
-    await writeFile(tempPath, text, { encoding: "utf8", flag: "wx", mode: existingStats.mode & 0o777 });
-    await chmod(tempPath, existingStats.mode & 0o777);
-    await rename(tempPath, realTargetPath);
-  } catch (error) {
-    await unlink(tempPath).catch(() => undefined);
-    throw error;
+export async function writeNewTextFileAtomically(path: string, text: string): Promise<void> {
+  await assertNewTextFileTarget(path);
+  await writeFile(path, text, { encoding: "utf8", flag: "wx", mode: 0o666 });
+}
+
+export async function assertNewTextFileTarget(path: string): Promise<void> {
+  const existingStats = await lstat(path).catch(() => undefined);
+  if (existingStats) {
+    throw new FileTextError(`Add File target already exists: ${path}`);
   }
+  await assertParentDirectory(path);
+}
+
+export async function deleteExistingRegularFile(path: string): Promise<void> {
+  const realTargetPath = await realpath(path).catch(() => {
+    throw new FileTextError(`File not found: ${path}`);
+  });
+  const existingStats = await stat(realTargetPath);
+  if (!existingStats.isFile()) {
+    throw new FileTextError(`Path is not a regular text file: ${path}`);
+  }
+  await access(realTargetPath, constants.R_OK | constants.W_OK).catch(() => {
+    throw new FileTextError(`File is not readable and writable: ${path}`);
+  });
+  await unlink(realTargetPath);
 }
 
 export async function assertNotDirectory(path: string): Promise<void> {
   const stats = await lstat(path).catch(() => undefined);
   if (stats?.isDirectory()) {
     throw new FileTextError(`Directories are not supported: ${path}`);
+  }
+}
+
+async function assertParentDirectory(path: string): Promise<void> {
+  const parentDirectory = dirname(path);
+  const parentStats = await stat(parentDirectory).catch(() => {
+    throw new FileTextError(`Parent directory not found: ${parentDirectory}`);
+  });
+  if (!parentStats.isDirectory()) {
+    throw new FileTextError(`Parent path is not a directory: ${parentDirectory}`);
+  }
+  await access(parentDirectory, constants.R_OK | constants.W_OK).catch(() => {
+    throw new FileTextError(`Parent directory is not writable: ${parentDirectory}`);
+  });
+}
+
+async function writeTextFileViaTemp(path: string, text: string, mode: number): Promise<void> {
+  const targetDirectory = dirname(path);
+  const tempPath = resolve(targetDirectory, `.hashline-patch-${process.pid}-${randomUUID()}.tmp`);
+
+  try {
+    await writeFile(tempPath, text, { encoding: "utf8", flag: "wx", mode });
+    await chmod(tempPath, mode);
+    await rename(tempPath, path);
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
   }
 }

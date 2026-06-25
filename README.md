@@ -1,8 +1,8 @@
 # pi-hashline-patch
 
-Pi extension package for stable hashline reads and hash-only patch apply.
+Pi extension package for stable hashline reads and universal hashline patch apply.
 
-When loaded, the extension overrides Pi's built-in `read`, disables built-in `edit`, and enables `read` / `patch`. Built-in `write` stays active, matching pi-hashline-edit-pro: `write` does not conflict with hash-anchored patching, while `edit` does.
+When loaded, extension overrides Pi's built-in `read`, disables built-in `edit` and `write`, and enables only `read` / `patch` for file reads and writes. `patch` can add files, so built-in `write` is hidden.
 
 ## Tools
 
@@ -32,35 +32,45 @@ Input:
 
 ```ts
 {
-  path: string;
   patch: string;
+  path?: string;    // legacy single-file @@ @@ patches only
   dry_run?: boolean;
 }
 ```
 
-Patch syntax:
+Preferred syntax is Codex-like universal patch text:
 
 ```diff
---- a/path optional
-+++ b/path optional
+*** Begin Patch
+*** Add File: new.txt
++literal new file line
+*** Update File: existing.txt
 @@ @@
  HHHH│context
 -HHHH│deleted
 +HHHH│inserted
+*** Delete File: old.txt
+@@ @@
+-HHHH│old file line
+*** End Patch
 ```
 
-Each hunk is located by exact contiguous sequence of context/deletion hashes. Exactly one match is required. No fuzzy fallback, line-number matching, duplicate counters, or perfect hashing.
+Update hunks are located by exact contiguous sequence of context/deletion hashes. Exactly one match is required. No fuzzy fallback, line-number matching, duplicate counters, or perfect hashing.
 
-Success output is a compact post-edit hash-only receipt, not the whole patched file:
+Success output is compact and model-visible: file operation headers plus hash-only receipt/status. Full content diff is not shown in visible output; host/UI can read `details.diff`.
 
 ```text
+*** Add File: new.txt
++HHHH
+*** Update File: existing.txt
 @@ result
  HHHH
 +HHHH
- HHHH
+*** Delete File: old.txt
+Deleted file
 ```
 
-Receipt rows include only surviving/current context hashes (` HHHH`) and newly inserted hashes (`+HHHH`). Deleted hashes and file content are omitted from visible output. If receipt is empty or too large, the patch still succeeds after a valid apply and returns a short status telling you to use `read`.
+Delete File uses hard delete after validation. It requires delete-only hashline evidence covering the complete current file, so accidental partial delete is rejected. Deleted content is omitted from visible output; `details.diff` contains full content diff for UI/host.
 
 ## Validate
 

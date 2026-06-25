@@ -54,7 +54,7 @@ describe("patch tool", () => {
     if (content.type !== "text") {
       throw new Error("Expected text content");
     }
-    expect(content.text).toBe(["@@ result", `+${hashLine("new")}`].join("\n"));
+    expect(content.text).toBe(["*** Update File: file.txt", "@@ result", `+${hashLine("new")}`].join("\n"));
     await expect(readFile(file, "utf8")).resolves.toBe("old");
   });
 
