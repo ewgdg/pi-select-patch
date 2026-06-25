@@ -269,23 +269,12 @@ function updateDryRunFileState(virtualFiles: Map<string, DryRunFileState>, chang
 }
 
 async function writeRetryPatch(operations: readonly UniversalPatchOperation[]): Promise<string> {
-  const baseDirectory = await retryBaseDirectory();
-  const directory = await mkdtemp(join(baseDirectory, "pi-hashline-patch-"));
+  const directory = await mkdtemp(join(tmpdir(), "pi-hashline-patch-"));
   const retryPatchPath = join(directory, "retry.patch");
   await writeRawFile(retryPatchPath, serializeUniversalPatch(operations), { encoding: "utf8", mode: 0o600, flag: "wx" });
   return retryPatchPath;
 }
 
-async function retryBaseDirectory(): Promise<string> {
-  const runtimeDirectory = process.env.XDG_RUNTIME_DIR;
-  if (runtimeDirectory) {
-    const writable = await access(runtimeDirectory, constants.R_OK | constants.W_OK | constants.X_OK).then(() => true, () => false);
-    if (writable) {
-      return runtimeDirectory;
-    }
-  }
-  return tmpdir();
-}
 
 function renderSequentialFailureMessage(args: {
   appliedChanges: readonly PlannedFileChange[];
