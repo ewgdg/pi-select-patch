@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { hashLine, parsePatch } from "../src/api.js";
 
-const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 
 describe("patch parser", () => {
   it("accepts hunk anchor hints", () => {
-    const parsed = parsePatch(["@@ @12", " :ctx", "@@ @3...7", " :other"].join("\n"));
+    const parsed = parsePatch(["@@ @12", "=:ctx", "@@ @3...7", "=:other"].join("\n"));
 
     expect(parsed.hunks[0]).toMatchObject({ anchorHint: { line: 12 } });
     expect(parsed.hunks[0].ops).toMatchObject([{ kind: "context", content: "ctx" }]);
@@ -15,12 +15,12 @@ describe("patch parser", () => {
 
   it("rejects malformed hunk anchor hints", () => {
     for (const header of ["@@ @0", "@@ @-1", "@@ @abc", "@@ @12 extra", "@@ @ 12", "@@ @1...0", "@@ @3...2", "@@ @1...abc", "@@ @1 ...3", "@@ @1... 3"]) {
-      expect(() => parsePatch([header, " :ctx"].join("\n"))).toThrow("[E_INVALID_PATCH]");
+      expect(() => parsePatch([header, "=:ctx"].join("\n"))).toThrow("[E_INVALID_PATCH]");
     }
   });
 
   it("accepts 3- and 4-character hash context/delete hunks with dedicated hash prefixes", () => {
-    const patch = parsePatch(["@@", ` #${hashLine("ctx").slice(0, 3)}`, row("-", "old"), row("+", "new")].join("\n"));
+    const patch = parsePatch(["@@", `=#${hashLine("ctx").slice(0, 3)}`, row("-", "old"), row("+", "new")].join("\n"));
     expect(patch.hunks[0].ops).toMatchObject([
       { kind: "context", hash: hashLine("ctx").slice(0, 3) },
       { kind: "delete", hash: hashLine("old") },
@@ -29,13 +29,13 @@ describe("patch parser", () => {
   });
 
   it("accepts context and delete ellipsis operations", () => {
-    const patch = parsePatch(["@@", row(" ", "start"), " ...", "-...", row(" ", "end")].join("\n"));
+    const patch = parsePatch(["@@", row("=", "start"), "=...", "-...", row("=", "end")].join("\n"));
     expect(patch.hunks[0].ops.map((op) => op.kind)).toEqual(["context", "range", "range", "context"]);
     expect(patch.hunks[0].ops.filter((op) => op.kind === "range").map((op) => op.rangeKind)).toEqual(["context", "delete"]);
   });
 
   it("parses text ellipsis rows as literal locators", () => {
-    const parsed = parsePatch(["@@", " :...", "-:..."].join("\n"));
+    const parsed = parsePatch(["@@", "=:...", "-:..."].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "..." },
@@ -55,7 +55,7 @@ describe("patch parser", () => {
   });
 
   it("parses text context/delete locators literally", () => {
-    const parsed = parsePatch(["@@", " :ctx text", "-:delete text", " :│starts", "-:│delete pipe"].join("\n"));
+    const parsed = parsePatch(["@@", "=:ctx text", "-:delete text", "=:│starts", "-:│delete pipe"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "ctx text" },
@@ -67,7 +67,7 @@ describe("patch parser", () => {
 
 
   it("parses prefix, contains, and suffix text context/delete locators", () => {
-    const parsed = parsePatch(["@@", " ^function parse", "-^old value", " *needle value", "-*delete needle", " $);", "-$old suffix"].join("\n"));
+    const parsed = parsePatch(["@@", "=^function parse", "-^old value", "=*needle value", "-*delete needle", "=$);", "-$old suffix"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "function parse", textSelector: "prefix" },
@@ -82,7 +82,7 @@ describe("patch parser", () => {
   it("parses combined text context/delete locators and normalizes contains", () => {
     const parsed = parsePatch([
       "@@",
-      ' ?{"prefix":"function ","contains":"parse","suffix":" {"}',
+      '=?{"prefix":"function ","contains":"parse","suffix":" {"}',
       '-?{"contains":["old","value"]}'
     ].join("\n"));
 
@@ -94,25 +94,25 @@ describe("patch parser", () => {
 
   it("rejects malformed combined text locators", () => {
     for (const selector of [
-      ' ?not-json',
-      ' ?[]',
-      ' ?"text"',
-      ' ?{}',
-      ' ?{"unknown":"x"}',
-      ' ?{"prefix":""}',
-      ' ?{"prefix":1}',
-      ' ?{"suffix":""}',
-      ' ?{"contains":""}',
-      ' ?{"contains":[]}',
-      ' ?{"contains":["ok",""]}',
-      ' ?{"contains":[1]}'
+      '=?not-json',
+      '=?[]',
+      '=?"text"',
+      '=?{}',
+      '=?{"unknown":"x"}',
+      '=?{"prefix":""}',
+      '=?{"prefix":1}',
+      '=?{"suffix":""}',
+      '=?{"contains":""}',
+      '=?{"contains":[]}',
+      '=?{"contains":["ok",""]}',
+      '=?{"contains":[1]}'
     ]) {
       expect(() => parsePatch(["@@", selector].join("\n"))).toThrow("[E_INVALID_PATCH]");
     }
   });
 
   it("keeps caret, star, and dollar text selectors exact behind colon", () => {
-    const parsed = parsePatch(["@@", " :^literal", "-:*literal", " :cost$"].join("\n"));
+    const parsed = parsePatch(["@@", "=:^literal", "-:*literal", "=:cost$"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "^literal", textSelector: "exact" },
@@ -122,16 +122,16 @@ describe("patch parser", () => {
   });
 
   it("rejects empty prefix, contains, and suffix text locators", () => {
-    expect(() => parsePatch("@@\n ^")).toThrow("Prefix selectors require non-empty text");
+    expect(() => parsePatch("@@\n=^")).toThrow("Prefix selectors require non-empty text");
     expect(() => parsePatch("@@\n-^" )).toThrow("Prefix selectors require non-empty text");
-    expect(() => parsePatch("@@\n *")).toThrow("Contains selectors require non-empty text");
+    expect(() => parsePatch("@@\n=*")).toThrow("Contains selectors require non-empty text");
     expect(() => parsePatch("@@\n-*")).toThrow("Contains selectors require non-empty text");
-    expect(() => parsePatch("@@\n $")).toThrow("Suffix selectors require non-empty text");
+    expect(() => parsePatch("@@\n=$")).toThrow("Suffix selectors require non-empty text");
     expect(() => parsePatch("@@\n-$")).toThrow("Suffix selectors require non-empty text");
   });
 
   it("parses blank text context/delete locators", () => {
-    const parsed = parsePatch(["@@", " :", "-:"].join("\n"));
+    const parsed = parsePatch(["@@", "=:", "-:"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "" },
@@ -142,23 +142,23 @@ describe("patch parser", () => {
   it("rejects legacy bare text and hash locator operations", () => {
     const hash = hashLine("ctx");
 
-    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("Raw context row detected");
+    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("Space context operation is no longer supported");
     expect(() => parsePatch(["@@", `-${hash}`].join("\n"))).toThrow("Raw delete row detected");
-    expect(() => parsePatch(["@@", " bare text"].join("\n"))).toThrow("use exact selector ' :bare text'");
+    expect(() => parsePatch(["@@", "=bare text"].join("\n"))).toThrow("use exact selector '=:bare text'");
     expect(() => parsePatch(["@@", "-bare text"].join("\n"))).toThrow("use exact selector '-:bare text'");
     expect(() => parsePatch(["@@", `=${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
     expect(() => parsePatch(["@@", `~${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects line-number hunk headers", () => {
-    expect(() => parsePatch(`@@ -1,1 +1,1 @@\n${row(" ", "ctx")}`)).toThrow("[E_INVALID_PATCH]");
+    expect(() => parsePatch(`@@ -1,1 +1,1 @@\n${row("=", "ctx")}`)).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects bad dedicated hash operations", () => {
-    expect(() => parsePatch("@@\n #ab")).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch("@@\n #abcde")).toThrow("[E_INVALID_PATCH]");
+    expect(() => parsePatch("@@\n=#ab")).toThrow("[E_INVALID_PATCH]");
+    expect(() => parsePatch("@@\n=#abcde")).toThrow("[E_INVALID_PATCH]");
     expect(() => parsePatch("@@\n-#a*c!")).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch(`@@\n #${hashLine("ctx")}│ctx`)).toThrow("[E_INVALID_PATCH]");
+    expect(() => parsePatch(`@@\n=#${hashLine("ctx")}│ctx`)).toThrow("[E_INVALID_PATCH]");
   });
 
   it("treats hashline-looking insert rows as literal content", () => {
@@ -174,7 +174,7 @@ describe("patch parser", () => {
   });
 
   it("rejects file headers inside Update File sections", () => {
-    const patch = ["--- a", "+++ b", "@@", row(" ", "ctx")].join("\n");
+    const patch = ["--- a", "+++ b", "@@", row("=", "ctx")].join("\n");
     expect(() => parsePatch(patch)).toThrow("[E_INVALID_PATCH]");
   });
 });

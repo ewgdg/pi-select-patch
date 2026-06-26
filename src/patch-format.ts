@@ -130,14 +130,17 @@ function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {
     const content = line.slice(1);
     return { kind: "insert", hash: hashFn(content), content };
   }
-  if (line.startsWith(" ")) {
+  if (line.startsWith("=")) {
     return parseSelectorPatchOp("context", line.slice(1), line);
+  }
+  if (line.startsWith(" ")) {
+    throwLegacySpaceContextOperationError(line);
   }
   if (line.startsWith("-")) {
     return parseSelectorPatchOp("delete", line.slice(1), line);
   }
 
-  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use ' :<text>', ' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', '-:<text>', '-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '+<text>', ' #<hash>', '-#<hash>', ' ...', or '-...'.`);
+  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use '=:<text>', '=^<prefix>', '=*<needle>', '=?{...}', '=$<suffix>', '-:<text>', '-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '+<text>', '=#<hash>', '-#<hash>', '=...', or '-...'.`);
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string): PatchOp {
@@ -166,10 +169,17 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
   throwRawTextSelectorError(kind, selector, line);
 }
 
+
+function throwLegacySpaceContextOperationError(line: string): never {
+  const selector = line.slice(1);
+  const suggestedContextSelector = selector.startsWith(":") || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$") || selector.startsWith("#") || selector === "..." ? `=${selector}` : `=:${selector}`;
+  throw new InvalidPatchError(`Space context operation is no longer supported: '${line}'. Use '=' context operation '${suggestedContextSelector}'.`);
+}
+
 function throwRawTextSelectorError(kind: MatchPatchOpKind, selector: string, line: string): never {
-  const suggestedExactSelector = kind === "context" ? ` :${selector}` : `-:${selector}`;
+  const suggestedExactSelector = kind === "context" ? `=:${selector}` : `-:${selector}`;
   throw new InvalidPatchError(
-    `Raw ${kind} row detected: '${line}'. Rows use <operation><selector><locator>; use exact selector '${suggestedExactSelector}', or one of ${kind === "context" ? "' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', ' #<hash>', or ' ...'" : "'-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`
+    `Raw ${kind} row detected: '${line}'. Rows use <operation><selector><locator>; use exact selector '${suggestedExactSelector}', or one of ${kind === "context" ? "'=^<prefix>', '=*<needle>', '=?{...}', '=$<suffix>', '=#<hash>', or '=...'" : "'-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`
   );
 }
 
@@ -256,7 +266,7 @@ function parseSuffixPatchOp(kind: MatchPatchOpKind, content: string, line: strin
 
 function parseHashPatchOp(kind: MatchPatchOpKind, hash: string, line: string): MatchPatchOp {
   if (!isHash(hash)) {
-    throw new InvalidPatchError(`Malformed ${kind} hash operation '${line}'. Hash locators must be 3 or 4 base64url characters after '${kind === "context" ? " #" : "-#"}'.`);
+    throw new InvalidPatchError(`Malformed ${kind} hash operation '${line}'. Hash locators must be 3 or 4 base64url characters after '${kind === "context" ? "=#" : "-#"}'.`);
   }
   return { kind, hash };
 }

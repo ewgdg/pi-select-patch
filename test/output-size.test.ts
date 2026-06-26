@@ -12,7 +12,7 @@ import { patchTool } from "../src/tools/locator-patch.js";
 import { readTool } from "../src/tools/locator-read.js";
 
 const makeTempDir = () => mkdtemp(join(tmpdir(), "pi-locator-patch-"));
-const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 const renderedRow = (content: string) => `${hashLine(content)}│${content}`;
 const oversizedContent = () => "x".repeat(LLM_VISIBLE_OUTPUT_MAX_BYTES + 1);
 const oneOverLineCap = () => Array.from({ length: LLM_VISIBLE_OUTPUT_MAX_LINES + 1 }, (_, index) => `line-${index}`);

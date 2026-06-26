@@ -22,19 +22,19 @@ Preferred `patch` input is Codex-like and carries file paths. The tool accepts e
 +literal new file line
 *** Update File: existing.txt
 @@
- :exact context text
+=:exact context text
 -:text to delete
- #HHHH
+=#HHHH
 @@ @120...140
- :start context text
- ...
+=:start context text
+=...
 +literal insertion after skipped context
- :end context text
+=:end context text
 @@
- #HHHH
+=#HHHH
 -...
 +literal replacement content
- :end context text
+=:end context text
 *** Delete File: old.txt
 *** End Patch
 ```
@@ -61,31 +61,31 @@ Update sections use locator hunks:
 
 ```diff
 @@
- :exact context text
+=:exact context text
 -:text to delete
 +literal inserted content
 @@ @120...140
- :start context text
- *middle needle
- ?{"prefix":"start","contains":["middle","needle"],"suffix":"end"}
- ...
+=:start context text
+=*middle needle
+=?{"prefix":"start","contains":["middle","needle"],"suffix":"end"}
+=...
 +literal insertion after skipped context
- #HHHH
+=#HHHH
 @@
- #HHHH
+=#HHHH
 -...
 +literal replacement content
- :end context text
+=:end context text
 ```
 
 Rules:
 
 - Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
-- Context/delete rows use `<operation><selector><locator>` syntax: `<operation>` is a leading space for context or `-` for delete; `<selector>` is `:`, `^`, `*`, `?`, `$`, `#`, or `...`; `<locator>` is selector-specific text, hash, or JSON. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` #<hash>` / `-#<hash>` = hash context/delete (3 or 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector.
-- Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
+- Context/delete rows use `<operation><selector><locator>` syntax: `<operation>` is `=` for context or `-` for delete; `<selector>` is `:`, `^`, `*`, `?`, `$`, `#`, or `...`; `<locator>` is selector-specific text, hash, or JSON. Forms: `=:<text>` / `-:<text>` = exact context/delete text, `=^<prefix>` / `-^<prefix>` = prefix context/delete text, `=*<needle>` / `-*<needle>` = contains context/delete text, `=?{...}` / `-?{...}` = combined context/delete text, `=$<suffix>` / `-$<suffix>` = suffix context/delete text, `=#<hash>` / `-#<hash>` = hash context/delete (3 or 4 base64url characters), `=...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector.
+- Combined selector JSON (`=?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
 - Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
-- ` ...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
+- `=...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context operations. Add `+` lines after it to replace that range.
 - Hunks without ellipsis must match exactly one contiguous span in current target file. Hunks with ellipsis must match exactly one sparse span.
 - Zero matches = stale hunk. More than one match = ambiguous hunk.
@@ -110,19 +110,19 @@ Delete is a hard delete of the resolved regular file after validation. Validatio
 +HHHH
 *** Update File: existing.txt
 @@ result
- HHHH
+=HHHH
 +HHHH
- HHHH
+=HHHH
 *** Delete File: old.txt
 Deleted file
 ```
 
 Update receipt lines include only:
 
-- ` HHHH` for context lines that survived in current file.
+- `=HHHH` for context lines that survived in current file.
 - `+HHHH` for newly inserted lines.
 
-Receipt rows are status output, not patch input syntax. Use ` #HHH`/` #HHHH` for hash context and `-#HHH`/`-#HHHH` for hash delete in patch input.
+Receipt rows are status output, not patch input syntax. Use `=#HHH`/`=#HHHH` for hash context and `-#HHH`/`-#HHHH` for hash delete in patch input.
 
 Deleted hashes are omitted from visible output. If receipt has no surviving context or inserted hashes, or exceeds visible output caps, patch still writes after valid apply and returns compact status.
 

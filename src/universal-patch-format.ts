@@ -115,24 +115,24 @@ function serializeTextSelector(op: Patch["hunks"][number]["ops"][number]): strin
   if (op.kind === "insert" || op.kind === "range") return "";
   if (op.combinedSelector !== undefined) {
     const combinedSelector = normalizeCombinedTextSelector(op.combinedSelector, "Combined selector");
-    return `${op.kind === "context" ? " ?" : "-?"}${JSON.stringify(combinedSelector)}`;
+    return `${op.kind === "context" ? "=?" : "-?"}${JSON.stringify(combinedSelector)}`;
   }
-  if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
-  if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
-  if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;
+  if (op.textSelector === "prefix") return `${op.kind === "context" ? "=^" : "-^"}${op.content ?? ""}`;
+  if (op.textSelector === "contains") return `${op.kind === "context" ? "=*" : "-*"}${op.content ?? ""}`;
+  if (op.textSelector === "suffix") return `${op.kind === "context" ? "=$" : "-$"}${op.content ?? ""}`;
   return `${textPatchOpPrefix(op.kind)}${op.content ?? ""}`;
 }
 
 function rangePatchOp(kind: "context" | "delete"): string {
-  return `${kind === "context" ? " " : "-"}...`;
+  return `${kind === "context" ? "=" : "-"}...`;
 }
 
 function textPatchOpPrefix(kind: "context" | "delete"): string {
-  return kind === "context" ? " :" : "-:";
+  return kind === "context" ? "=:" : "-:";
 }
 
 function hashPatchOpPrefix(kind: "context" | "delete"): string {
-  return kind === "context" ? " #" : "-#";
+  return kind === "context" ? "=#" : "-#";
 }
 
 function parseSection(header: SectionHeader, body: readonly string[], hashFn: HashFunction): UniversalPatchOperation {

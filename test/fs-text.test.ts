@@ -6,7 +6,7 @@ import { FileTextError, hashLine, readExistingTextFile, writeTextFileAtomically 
 import { patchTool } from "../src/tools/locator-patch.js";
 
 const makeTempDir = () => mkdtemp(join(tmpdir(), "pi-locator-patch-"));
-const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 
 describe("text file IO", () => {
   it("rejects invalid UTF-8, NUL bytes, and directories", async () => {

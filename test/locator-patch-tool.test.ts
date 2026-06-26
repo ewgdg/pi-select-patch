@@ -6,7 +6,7 @@ import { hashLine, parseText } from "../src/api.js";
 import { patchTool } from "../src/tools/locator-patch.js";
 
 const makeTempDir = () => mkdtemp(join(tmpdir(), "pi-locator-patch-"));
-const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 const resultText = (result: Awaited<ReturnType<typeof patchTool.execute>>) => {
   const content = result.content[0];
   if (content.type !== "text") {
@@ -48,13 +48,13 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
 
 describe("patch visible receipt", () => {
   it("is agent-visible as patch and returns post-edit hash-only receipt without deleted hashes or file content", async () => {
-    const diff = ["@@", row(" ", "a"), row("-", "old"), row("+", "new"), row(" ", "z")].join("\n");
+    const diff = ["@@", row("=", "a"), row("-", "old"), row("+", "new"), row("=", "z")].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
     expect(patchTool.name).toBe("patch");
     expect(resultText(result)).toBe(
-      ["*** Update File: file.txt", "@@ result", ` ${hashLine("a")}`, `+${hashLine("new")}`, ` ${hashLine("z")}`].join("\n")
+      ["*** Update File: file.txt", "@@ result", `=${hashLine("a")}`, `+${hashLine("new")}`, `=${hashLine("z")}`].join("\n")
     );
     expect(resultText(result)).not.toContain(hashLine("old"));
     expect(resultText(result)).not.toContain("old");
@@ -63,12 +63,12 @@ describe("patch visible receipt", () => {
   });
 
   it("applies update hunks with text-only locators", async () => {
-    const diff = ["@@", " :a", "-:old", "+new", " :z"].join("\n");
+    const diff = ["@@", "=:a", "-:old", "+new", "=:z"].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
     expect(resultText(result)).toBe(
-      ["*** Update File: file.txt", "@@ result", ` ${hashLine("a")}`, `+${hashLine("new")}`, ` ${hashLine("z")}`].join("\n")
+      ["*** Update File: file.txt", "@@ result", `=${hashLine("a")}`, `+${hashLine("new")}`, `=${hashLine("z")}`].join("\n")
     );
     await expect(readFile(file, "utf8")).resolves.toBe("a\nnew\nz\n");
   });
@@ -98,10 +98,10 @@ describe("patch visible receipt", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      row(" ", "line-49"),
+      row("=", "line-49"),
       row("-", "line-50"),
       row("+", "changed"),
-      row(" ", "line-51"),
+      row("=", "line-51"),
       "*** End Patch"
     ].join("\n");
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashLine, parsePatchInput, parseUniversalPatch, serializeUniversalPatch } from "../src/api.js";
 
-const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 
 describe("universal patch parser", () => {
   it("accepts Codex-like add, update, and delete file sections", () => {
@@ -34,7 +34,7 @@ describe("universal patch parser", () => {
   });
 
   it("rejects delete sections with body lines", () => {
-    const withBody = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@", row(" ", "ctx"), "*** End Patch"].join("\n");
+    const withBody = ["*** Begin Patch", "*** Delete File: doomed.txt", "@@", row("=", "ctx"), "*** End Patch"].join("\n");
     expect(() => parseUniversalPatch(withBody)).toThrow("[E_INVALID_PATCH]");
   });
 
@@ -45,15 +45,15 @@ describe("universal patch parser", () => {
       "+hello",
       "*** Update File: existing.txt",
       "@@ @3...9",
-      row(" ", "ctx"),
+      row("=", "ctx"),
       row("-", "old"),
-      " ^ctx",
-      " *middle",
-      ' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}',
-      " ...",
+      "=^ctx",
+      "=*middle",
+      '=?{"prefix":"pre","contains":["mid"],"suffix":"suf"}',
+      "=...",
       row("+", "new"),
       "-...",
-      " $after",
+      "=$after",
       "*** Delete File: doomed.txt",
       "*** End Patch"
     ].join("\n");
@@ -62,12 +62,12 @@ describe("universal patch parser", () => {
 
     expect(serialized).toBe(source);
     expect(serialized).toContain("@@ @3...9");
-    expect(serialized).toContain(` #${hashLine("ctx")}`);
+    expect(serialized).toContain(`=#${hashLine("ctx")}`);
     expect(serialized).toContain(`-#${hashLine("old")}`);
-    expect(serialized).toContain(" ^ctx");
-    expect(serialized).toContain(" *middle");
-    expect(serialized).toContain(' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}');
-    expect(serialized).toContain(" $after");
+    expect(serialized).toContain("=^ctx");
+    expect(serialized).toContain("=*middle");
+    expect(serialized).toContain('=?{"prefix":"pre","contains":["mid"],"suffix":"suf"}');
+    expect(serialized).toContain("=$after");
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
