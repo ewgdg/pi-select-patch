@@ -111,6 +111,7 @@ function serializePatchOp(op: Patch["hunks"][number]["ops"][number]): string {
 function serializeTextSelector(op: Patch["hunks"][number]["ops"][number]): string {
   if (op.kind === "insert" || op.kind === "range") return "";
   if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
+  if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
   if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;
   return `${textPatchOpPrefix(op.kind)}${op.content ?? ""}`;
 }

@@ -66,6 +66,7 @@ Update sections use locator hunks:
 +literal inserted content
 @@ @120...140
  :start context text
+ *middle needle
  ...
 +literal insertion after skipped context
  #HHHH
@@ -80,7 +81,7 @@ Rules:
 
 - Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
-- Operations use one operation char plus a selector: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, `+<text>` = literal insertion, ` #<hash>` = hash context, `-#<hash>` = hash delete (3 or 4 base64url characters), ` ...` = skipped context range, `-...` = delete range.
+- Operations use one operation char plus a selector: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, `+<text>` = literal insertion, ` #<hash>` = hash context, `-#<hash>` = hash delete (3 or 4 base64url characters), ` ...` = skipped context range, `-...` = delete range.
 - Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
 - ` ...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context operations. Add `+` lines after it to replace that range.

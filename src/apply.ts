@@ -254,6 +254,7 @@ function lineMatchesOp(line: CurrentLineEntry, op: MatchPatchOp): boolean {
 function textSelectorMatches(content: string, op: MatchPatchOp): boolean {
   if (op.content === undefined) return true;
   if (op.textSelector === "prefix") return content.startsWith(op.content);
+  if (op.textSelector === "contains") return content.includes(op.content);
   if (op.textSelector === "suffix") return content.endsWith(op.content);
   return content === op.content;
 }
@@ -299,6 +300,7 @@ function renderMatchLocator(op: MatchPatchOp): string {
   if (op.hash !== undefined) return `${op.kind === "context" ? " #" : "-#"}${op.hash}`;
   const prefix = op.kind === "context" ? " :" : "-:";
   if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
+  if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
   if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;
   return `${prefix}${op.content ?? ""}`;
 }
@@ -327,7 +329,7 @@ function validateHunkAnchorHint(hunk: Hunk, hunkIndex: number): void {
 function validateNoHashTextLocators(hunk: Hunk, hunkIndex: number): void {
   for (const op of hunk.ops) {
     if (isMatchOp(op) && op.hash !== undefined && op.content !== undefined) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text locators are not supported; use hash-only ( #HASH/-#HASH, 3 or 4 chars) or text-only ( :text/-:text, ^prefix/-^prefix, or $suffix/-$suffix).`);
+      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text locators are not supported; use hash-only ( #HASH/-#HASH, 3 or 4 chars) or text-only ( :text/-:text, ^prefix/-^prefix, *needle/-*needle, or $suffix/-$suffix).`);
     }
   }
 }

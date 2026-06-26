@@ -7,7 +7,7 @@ export type PatchOpKind = MatchPatchOpKind | "insert" | "range";
 
 export type PatchOp = MatchPatchOp | InsertPatchOp | RangePatchOp;
 
-export type TextSelectorKind = "exact" | "prefix" | "suffix";
+export type TextSelectorKind = "exact" | "prefix" | "suffix" | "contains";
 
 export interface MatchPatchOp {
   kind: MatchPatchOpKind;
@@ -130,7 +130,7 @@ function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {
     return parseSelectorPatchOp("delete", line.slice(1), line);
   }
 
-  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use ' :<text>', ' ^<prefix>', ' $<suffix>', '-:<text>', '-^<prefix>', '-$<suffix>', '+<text>', ' #<hash>', '-#<hash>', ' ...', or '-...'.`);
+  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use ' :<text>', ' ^<prefix>', ' *<needle>', ' $<suffix>', '-:<text>', '-^<prefix>', '-*<needle>', '-$<suffix>', '+<text>', ' #<hash>', '-#<hash>', ' ...', or '-...'.`);
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string): PatchOp {
@@ -146,11 +146,14 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
   if (selector.startsWith("^")) {
     return parsePrefixPatchOp(kind, selector.slice(1), line);
   }
+  if (selector.startsWith("*")) {
+    return parseContainsPatchOp(kind, selector.slice(1), line);
+  }
   if (selector.startsWith("$")) {
     return parseSuffixPatchOp(kind, selector.slice(1), line);
   }
 
-  throw new InvalidPatchError(`Malformed ${kind} selector operation '${line}'. Use ${kind === "context" ? "' :<text>', ' ^<prefix>', ' $<suffix>', ' #<hash>', or ' ...'" : "'-:<text>', '-^<prefix>', '-$<suffix>', '-#<hash>', or '-...'"}.`);
+  throw new InvalidPatchError(`Malformed ${kind} selector operation '${line}'. Use ${kind === "context" ? "' :<text>', ' ^<prefix>', ' *<needle>', ' $<suffix>', ' #<hash>', or ' ...'" : "'-:<text>', '-^<prefix>', '-*<needle>', '-$<suffix>', '-#<hash>', or '-...'"}.`);
 }
 
 function parsePrefixPatchOp(kind: MatchPatchOpKind, content: string, line: string): MatchPatchOp {
@@ -158,6 +161,13 @@ function parsePrefixPatchOp(kind: MatchPatchOpKind, content: string, line: strin
     throw new InvalidPatchError(`Malformed ${kind} prefix operation '${line}'. Prefix selectors require non-empty text after '^'.`);
   }
   return { kind, content, textSelector: "prefix" };
+}
+
+function parseContainsPatchOp(kind: MatchPatchOpKind, content: string, line: string): MatchPatchOp {
+  if (content.length === 0) {
+    throw new InvalidPatchError(`Malformed ${kind} contains operation '${line}'. Contains selectors require non-empty text after '*'.`);
+  }
+  return { kind, content, textSelector: "contains" };
 }
 
 function parseSuffixPatchOp(kind: MatchPatchOpKind, content: string, line: string): MatchPatchOp {

@@ -63,10 +63,22 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" $computeOld();", "-$value;", " $finished();"]);
   });
 
-  it("throws stale and ambiguous for prefix and suffix locators", () => {
+  it("matches contains text locators for context and delete operations", () => {
+    const result = applyPatchToText(
+      "const value = computeOld();\nreturn value;\nfinished();",
+      patch(" *computeOld", "-*turn val", "+return nextValue;", " *ished")
+    );
+
+    expect(result.text).toBe("const value = computeOld();\nreturn nextValue;\nfinished();");
+    expect(result.hunkAudits[0].matchPattern).toEqual([" *computeOld", "-*turn val", " *ished"]);
+  });
+
+  it("throws stale and ambiguous for prefix, contains, and suffix locators", () => {
     expect(() => applyPatchToText("alpha one", patch("-^beta"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("one omega", patch("-*alpha"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("one omega", patch("-$alpha"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("alpha one\nalpha two", patch("-^alpha"))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("one omega\ntwo omega", patch("-*omega"))).toThrow(AmbiguousHunkError);
     expect(() => applyPatchToText("one omega\ntwo omega", patch("-$omega"))).toThrow(AmbiguousHunkError);
   });
 

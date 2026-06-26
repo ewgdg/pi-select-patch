@@ -66,29 +66,34 @@ describe("patch parser", () => {
   });
 
 
-  it("parses prefix and suffix text context/delete locators", () => {
-    const parsed = parsePatch(["@@", " ^function parse", "-^old value", " $);", "-$old suffix"].join("\n"));
+  it("parses prefix, contains, and suffix text context/delete locators", () => {
+    const parsed = parsePatch(["@@", " ^function parse", "-^old value", " *needle value", "-*delete needle", " $);", "-$old suffix"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "function parse", textSelector: "prefix" },
       { kind: "delete", content: "old value", textSelector: "prefix" },
+      { kind: "context", content: "needle value", textSelector: "contains" },
+      { kind: "delete", content: "delete needle", textSelector: "contains" },
       { kind: "context", content: ");", textSelector: "suffix" },
       { kind: "delete", content: "old suffix", textSelector: "suffix" }
     ]);
   });
 
-  it("keeps caret and dollar text selectors exact behind colon", () => {
-    const parsed = parsePatch(["@@", " :^literal", "-:cost$"].join("\n"));
+  it("keeps caret, star, and dollar text selectors exact behind colon", () => {
+    const parsed = parsePatch(["@@", " :^literal", "-:*literal", " :cost$"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "^literal", textSelector: "exact" },
-      { kind: "delete", content: "cost$", textSelector: "exact" }
+      { kind: "delete", content: "*literal", textSelector: "exact" },
+      { kind: "context", content: "cost$", textSelector: "exact" }
     ]);
   });
 
-  it("rejects empty prefix and suffix text locators", () => {
+  it("rejects empty prefix, contains, and suffix text locators", () => {
     expect(() => parsePatch("@@\n ^")).toThrow("Prefix selectors require non-empty text");
     expect(() => parsePatch("@@\n-^" )).toThrow("Prefix selectors require non-empty text");
+    expect(() => parsePatch("@@\n *")).toThrow("Contains selectors require non-empty text");
+    expect(() => parsePatch("@@\n-*")).toThrow("Contains selectors require non-empty text");
     expect(() => parsePatch("@@\n $")).toThrow("Suffix selectors require non-empty text");
     expect(() => parsePatch("@@\n-$")).toThrow("Suffix selectors require non-empty text");
   });

@@ -48,6 +48,7 @@ describe("universal patch parser", () => {
       row(" ", "ctx"),
       row("-", "old"),
       " ^ctx",
+      " *middle",
       " ...",
       row("+", "new"),
       "-...",
@@ -63,11 +64,12 @@ describe("universal patch parser", () => {
     expect(serialized).toContain(` #${hashLine("ctx")}`);
     expect(serialized).toContain(`-#${hashLine("old")}`);
     expect(serialized).toContain(" ^ctx");
+    expect(serialized).toContain(" *middle");
     expect(serialized).toContain(" $after");
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
-  it("round-trips exact and prefix/suffix text selectors with marker characters", () => {
+  it("round-trips exact, prefix, contains, and suffix text selectors with marker characters", () => {
     const serialized = serializeUniversalPatch([
       {
         kind: "update",
@@ -78,6 +80,7 @@ describe("universal patch parser", () => {
               { kind: "context", content: "^literal", textSelector: "exact" },
               { kind: "delete", content: "literal$", textSelector: "exact" },
               { kind: "context", content: "^suffix", textSelector: "suffix" },
+              { kind: "context", content: "middle", textSelector: "contains" },
               { kind: "delete", content: "$prefix", textSelector: "prefix" }
             ]
           }]
@@ -94,6 +97,7 @@ describe("universal patch parser", () => {
             { kind: "context", content: "^literal", textSelector: "exact" },
             { kind: "delete", content: "literal$", textSelector: "exact" },
             { kind: "context", content: "^suffix", textSelector: "suffix" },
+            { kind: "context", content: "middle", textSelector: "contains" },
             { kind: "delete", content: "$prefix", textSelector: "prefix" }
           ]
         }]
