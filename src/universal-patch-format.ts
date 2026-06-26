@@ -88,7 +88,9 @@ function serializeOperation(operation: UniversalPatchOperation): string[] {
 
 function serializePatchOp(op: Patch["hunks"][number]["ops"][number]): string {
   if (op.kind === "range") return `${patchOpPrefix(op.rangeKind)}...`;
-  return `${patchOpPrefix(op.kind)}${op.kind === "insert" ? op.content : op.hash}`;
+  if (op.kind === "insert") return `${patchOpPrefix(op.kind)}${op.content}`;
+  const hash = op.hash ?? "";
+  return `${patchOpPrefix(op.kind)}${op.content === undefined ? hash : `${hash}│${op.content}`}`;
 }
 
 function patchOpPrefix(kind: "context" | "delete" | "insert"): string {

@@ -45,11 +45,11 @@ describe("universal patch parser", () => {
       "+hello",
       "*** Update File: existing.txt",
       "@@",
-      row(" ", "ctx"),
+      ` ${hashLine("ctx")}│ctx`,
       " ...",
       row("+", "new"),
       "-...",
-      row(" ", "after"),
+      " │after",
       "*** Delete File: doomed.txt",
       "*** End Patch"
     ].join("\n");

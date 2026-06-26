@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pi extension for stable hashline reads and hash-only patch application.",
+  "description": "Pi extension for stable hashline reads and hash/text locator patch application.",
   "keywords": ["pi-package", "hashline", "patch"],
   "scripts": {
     "check": "tsc --noEmit",

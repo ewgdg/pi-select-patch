@@ -62,6 +62,17 @@ describe("patch visible receipt", () => {
     await expect(readFile(file, "utf8")).resolves.toBe("a\nnew\nz\n");
   });
 
+  it("applies update hunks with text-only and hash+text locators", async () => {
+    const diff = ["@@", " │a", `-${hashLine("old")}│old`, "+new", " │z"].join("\n");
+
+    const { file, result } = await patchFile("a\nold\nz\n", diff);
+
+    expect(resultText(result)).toBe(
+      ["*** Update File: file.txt", "@@ result", ` ${hashLine("a")}`, `+${hashLine("new")}`, ` ${hashLine("z")}`].join("\n")
+    );
+    await expect(readFile(file, "utf8")).resolves.toBe("a\nnew\nz\n");
+  });
+
   it("returns applied patch transcript in details.diff", async () => {
     const universal = [
       "*** Begin Patch",

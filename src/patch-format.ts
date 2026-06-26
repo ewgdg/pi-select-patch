@@ -1,16 +1,16 @@
 import { InvalidPatchError } from "./errors.js";
 import { HASH_SEPARATOR, isHash, type HashFunction, hashLine } from "./hash.js";
 
-export type HashPatchOpKind = "context" | "delete";
+export type MatchPatchOpKind = "context" | "delete";
 export type RangePatchOpKind = "context" | "delete";
-export type PatchOpKind = HashPatchOpKind | "insert" | "range";
+export type PatchOpKind = MatchPatchOpKind | "insert" | "range";
 
-export type PatchOp = HashPatchOp | InsertPatchOp | RangePatchOp;
+export type PatchOp = MatchPatchOp | InsertPatchOp | RangePatchOp;
 
-export interface HashPatchOp {
-  kind: HashPatchOpKind;
-  hash: string;
-  content: "";
+export interface MatchPatchOp {
+  kind: MatchPatchOpKind;
+  hash?: string;
+  content?: string;
 }
 
 export interface InsertPatchOp {
@@ -22,8 +22,6 @@ export interface InsertPatchOp {
 export interface RangePatchOp {
   kind: "range";
   rangeKind: RangePatchOpKind;
-  hash: "";
-  content: "";
 }
 
 export interface Hunk {
@@ -34,7 +32,7 @@ export interface Patch {
   hunks: Hunk[];
 }
 
-const OP_KIND_BY_PREFIX: Record<string, HashPatchOpKind | "insert"> = {
+const OP_KIND_BY_PREFIX: Record<string, MatchPatchOpKind | "insert"> = {
   " ": "context",
   "-": "delete",
   "+": "insert"
@@ -94,10 +92,10 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine): 
 
 function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {
   if (line === " ...") {
-    return { kind: "range", rangeKind: "context", hash: "", content: "" };
+    return { kind: "range", rangeKind: "context" };
   }
   if (line === "-...") {
-    return { kind: "range", rangeKind: "delete", hash: "", content: "" };
+    return { kind: "range", rangeKind: "delete" };
   }
 
   const prefix = line[0];
@@ -115,14 +113,23 @@ function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {
     return { kind, hash: hashFn(body), content: body };
   }
 
-  if (!isHash(body)) {
-    const hint = body.includes(HASH_SEPARATOR)
-      ? "Use only the 4-character hash for context/delete lines; remove the HASH│content suffix."
-      : "Context/delete lines must contain only a 4-character hash.";
-    throw new InvalidPatchError(`Malformed ${kind} operation '${line}'. ${hint}`);
+  if (body.startsWith(HASH_SEPARATOR)) {
+    return { kind, content: body.slice(HASH_SEPARATOR.length) };
   }
 
-  return { kind, hash: body, content: "" };
+  const separatorIndex = body.indexOf(HASH_SEPARATOR);
+  if (separatorIndex === 4 && isHash(body.slice(0, 4))) {
+    return { kind, hash: body.slice(0, 4), content: body.slice(4 + HASH_SEPARATOR.length) };
+  }
+
+  if (isHash(body)) {
+    return { kind, hash: body };
+  }
+
+  const hint = body.includes(HASH_SEPARATOR)
+    ? "Use HASH│text or │text for context/delete lines; the hash must be exactly 4 valid characters before the separator."
+    : "Context/delete lines must contain a 4-character hash, HASH│text, or │text.";
+  throw new InvalidPatchError(`Malformed ${kind} operation '${line}'. ${hint}`);
 }
 
 function looksLikeHashline(value: string): boolean {

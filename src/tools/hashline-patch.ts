@@ -57,13 +57,13 @@ export const patchTool = defineTool({
   name: "patch",
   label: "Hashline Patch",
   description: "Apply a Codex-like multi-file hashline patch with Add File, Update File, and Delete File sections.",
-  promptSnippet: "patch accepts inline patch text or patch_file with *** Begin Patch / *** Add File / *** Update File / *** Delete File / *** End Patch; updates use hash-only anchors, ' ...' skipped context ranges, '-...' range deletion, and literal inserted lines.",
+  promptSnippet: "patch accepts inline patch text or patch_file with *** Begin Patch / *** Add File / *** Update File / *** Delete File / *** End Patch; updates use hash/text locators, ' ...' skipped context ranges, '-...' range deletion, and literal inserted lines.",
   promptGuidelines: [
     "Provide exactly one patch source: inline 'patch' text or 'patch_file' pointing to a UTF-8 patch file.",
     "Patch input uses '*** Begin Patch', one or more file operation headers, then '*** End Patch'. File operations apply sequentially; earlier successes stay applied if a later operation fails.",
     "Add File body lines are literal new file content prefixed with '+'. Target file must not already exist. Visible receipt shows only '*** Add File: path' and '+HASH' rows.",
-    "Update File sections use Codex-style '@@' hunks. Context/delete lines are hash-only (' HHHH', '-HHHH'); ' ...' preserves a skipped context range; '-...' deletes a range; insert lines are literal content ('+new text'). Do not paste HASH│content rows into patch operations.",
-    "Update matching uses exact hash anchors and sparse ellipsis ranges. Do not use line numbers, duplicate counters, fuzzy fallback, or legacy replace fields.",
+    "Update File sections use Codex-style '@@' hunks. Context/delete lines accept hash-only (' HHHH'), hash+text (' HHHH│text'), or text-only (' │text') locators; ' ...' preserves a skipped context range; '-...' deletes a range; insert lines are literal content ('+new text').",
+    "Update matching uses exact locators and sparse ellipsis ranges; hash+text locators require both values to match. Do not use line numbers, duplicate counters, fuzzy fallback, or legacy replace fields.",
     "Delete File sections match Codex behavior: use only the file header and no body. The tool hard-deletes the resolved regular file after validation; visible output exposes no deleted content.",
     "During non-dry apply failures, the tool stops at the failed operation and writes a retry patch file containing the failed operation plus skipped later operations.",
     "On success, agent-visible output is a compact post-apply hash receipt/status for affected sections. Treat returned hashes as current for those sections."
