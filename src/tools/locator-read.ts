@@ -13,19 +13,14 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 export const readTool = defineTool({
   name: "read",
   label: "Locator Read",
-  description: "Read a UTF-8 text file as plain content lines by default; pass includeHashes for stable HASH│content lines. Image files use Pi's built-in read behavior.",
-  promptSnippet: "read returns text files as plain content lines by default. Pass includeHashes: true to prepend variable 3/4-character HASH│ prefixes for hash/text locator patching; images are returned by the built-in image reader.",
-  promptGuidelines: [
-    "Use includeHashes: true only when you need hash locators; default text reads are plain content lines.",
-    "For text files, read output has no line numbers, duplicate counters, or fuzzy anchors. includeHashes may leave short/low-entropy lines plain.",
-    "For image files, read delegates to Pi's built-in image handling instead of returning locators."
-  ],
+  description: "Read a UTF-8 text file as plain content lines by default. Image files use Pi's built-in read behavior.",
+  promptSnippet: "Read a text file or image.",
   parameters: Type.Object(
     {
-      path: Type.String({ description: "Text file path to read." }),
+      path: Type.String({ description: "File path to read." }),
       offset: Type.Optional(Type.Integer({ minimum: 1, description: "1-based logical line offset." })),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_LIMIT, description: "Max logical lines to return." })),
-      includeHashes: Type.Optional(Type.Boolean({ description: "Prepend variable-length stable hashes to eligible text lines." }))
+      includeHashes: Type.Optional(Type.Boolean({ description: "Prepend variable-length stable hashes to eligible text lines for use with hash locators." }))
     },
     { additionalProperties: false }
   ),
