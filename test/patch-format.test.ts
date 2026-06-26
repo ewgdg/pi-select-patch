@@ -142,10 +142,10 @@ describe("patch parser", () => {
   it("rejects legacy bare text and hash locator operations", () => {
     const hash = hashLine("ctx");
 
-    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch(["@@", `-${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch(["@@", " bare text"].join("\n"))).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch(["@@", "-bare text"].join("\n"))).toThrow("[E_INVALID_PATCH]");
+    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("Raw context row detected");
+    expect(() => parsePatch(["@@", `-${hash}`].join("\n"))).toThrow("Raw delete row detected");
+    expect(() => parsePatch(["@@", " bare text"].join("\n"))).toThrow("use exact selector ' :bare text'");
+    expect(() => parsePatch(["@@", "-bare text"].join("\n"))).toThrow("use exact selector '-:bare text'");
     expect(() => parsePatch(["@@", `=${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
     expect(() => parsePatch(["@@", `~${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });

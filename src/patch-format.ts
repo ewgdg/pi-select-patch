@@ -163,7 +163,14 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
     return parseSuffixPatchOp(kind, selector.slice(1), line);
   }
 
-  throw new InvalidPatchError(`Malformed ${kind} selector operation '${line}'. Use ${kind === "context" ? "' :<text>', ' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', ' #<hash>', or ' ...'" : "'-:<text>', '-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`);
+  throwRawTextSelectorError(kind, selector, line);
+}
+
+function throwRawTextSelectorError(kind: MatchPatchOpKind, selector: string, line: string): never {
+  const suggestedExactSelector = kind === "context" ? ` :${selector}` : `-:${selector}`;
+  throw new InvalidPatchError(
+    `Raw ${kind} row detected: '${line}'. Rows use <operation><selector><locator>; use exact selector '${suggestedExactSelector}', or one of ${kind === "context" ? "' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', ' #<hash>', or ' ...'" : "'-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`
+  );
 }
 
 function parsePrefixPatchOp(kind: MatchPatchOpKind, content: string, line: string): MatchPatchOp {
