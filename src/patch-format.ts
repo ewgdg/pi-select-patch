@@ -26,6 +26,7 @@ export interface RangePatchOp {
 
 export interface HunkAnchorHint {
   line: number;
+  endLine?: number;
 }
 
 export interface Hunk {
@@ -84,7 +85,7 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine): 
   return { hunks };
 }
 
-const HUNK_HEADER_PATTERN = /^@@(?: @([1-9]\d*))?$/;
+const HUNK_HEADER_PATTERN = /^@@(?: @([1-9]\d*)(?:\.\.\.([1-9]\d*))?)?$/;
 
 function isHunkHeaderLine(line: string): boolean {
   return HUNK_HEADER_PATTERN.test(line);
@@ -94,7 +95,7 @@ function parseHunkHeader(line: string): HunkAnchorHint | undefined {
   const match = HUNK_HEADER_PATTERN.exec(line);
   if (!match) {
     if (line.startsWith("@@")) {
-      throw new InvalidPatchError("Hunk header must be '@@' or '@@ @<positive-line>'.");
+      throw new InvalidPatchError("Hunk header must be '@@', '@@ @<positive-line>', or '@@ @<start>...<end>'.");
     }
     throw new InvalidPatchError(`Expected hunk header '@@', got '${line}'.`);
   }
@@ -103,10 +104,15 @@ function parseHunkHeader(line: string): HunkAnchorHint | undefined {
   if (lineText === undefined) return undefined;
 
   const hintLine = Number(lineText);
-  if (!Number.isSafeInteger(hintLine)) {
-    throw new InvalidPatchError(`Malformed hunk anchor hint '${line}'. Line number must be a safe positive integer.`);
+  const endLineText = match[2];
+  const endLine = endLineText === undefined ? undefined : Number(endLineText);
+  if (!Number.isSafeInteger(hintLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) {
+    throw new InvalidPatchError(`Malformed hunk anchor hint '${line}'. Line numbers must be safe positive integers.`);
   }
-  return { line: hintLine };
+  if (endLine !== undefined && hintLine > endLine) {
+    throw new InvalidPatchError(`Malformed hunk anchor hint '${line}'. Start line must be less than or equal to end line.`);
+  }
+  return endLine === undefined ? { line: hintLine } : { line: hintLine, endLine };
 }
 
 function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {

@@ -149,9 +149,10 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
   const currentEntries = lines.map((content) => ({ content, hash: hashFn(content) }));
   const matchOps = hunk.ops.filter(isMatchOp);
   const searchStart = getAnchorSearchStart(hunk);
+  const searchEnd = getAnchorSearchEnd(hunk);
   const matches = hunkHasSparseRange(hunk)
-    ? findSparseMatches(currentEntries, hunk.ops, 2, searchStart)
-    : findContiguousMatches(currentEntries, matchOps, searchStart).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
+    ? findSparseMatches(currentEntries, hunk.ops, 2, searchStart, searchEnd)
+    : findContiguousMatches(currentEntries, matchOps, searchStart, searchEnd).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
   if (matches.length === 0) {
     throw new StaleHunkError(`Hunk ${hunkIndex} match pattern ${matchPattern.join(" ")} was not found${renderAnchorSearchScope(hunk)}.`);
   }
@@ -262,8 +263,15 @@ function getAnchorSearchStart(hunk: Hunk): number {
   return hunk.anchorHint ? hunk.anchorHint.line - 1 : 0;
 }
 
+function getAnchorSearchEnd(hunk: Hunk): number | undefined {
+  return hunk.anchorHint?.endLine;
+}
+
 function renderAnchorSearchScope(hunk: Hunk): string {
-  return hunk.anchorHint ? ` at or after line ${hunk.anchorHint.line}` : "";
+  if (!hunk.anchorHint) return "";
+  return hunk.anchorHint.endLine === undefined
+    ? ` at or after line ${hunk.anchorHint.line}`
+    : ` within lines ${hunk.anchorHint.line}...${hunk.anchorHint.endLine}`;
 }
 
 function buildMatchPattern(hunk: Hunk): string[] {
@@ -297,8 +305,12 @@ function validateSparseRanges(hunk: Hunk, hunkIndex: number): void {
 }
 
 function validateHunkAnchorHint(hunk: Hunk, hunkIndex: number): void {
-  if (hunk.anchorHint && (!Number.isSafeInteger(hunk.anchorHint.line) || hunk.anchorHint.line < 1)) {
+  if (!hunk.anchorHint) return;
+  if (!Number.isSafeInteger(hunk.anchorHint.line) || hunk.anchorHint.line < 1) {
     throw new InvalidPatchError(`Hunk ${hunkIndex} anchor hint line must be a safe positive integer.`);
+  }
+  if (hunk.anchorHint.endLine !== undefined && (!Number.isSafeInteger(hunk.anchorHint.endLine) || hunk.anchorHint.endLine < 1 || hunk.anchorHint.line > hunk.anchorHint.endLine)) {
+    throw new InvalidPatchError(`Hunk ${hunkIndex} anchor hint range must use safe positive integers with start less than or equal to end.`);
   }
 }
 
@@ -329,10 +341,10 @@ function contiguousMatchToSparseMatch(ops: readonly Hunk["ops"][number][], start
   return { start, end: start + consumed, lineIndexes, ranges: new Map() };
 }
 
-function findSparseMatches(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], maxMatches: number, searchStart = 0): SparseMatch[] {
+function findSparseMatches(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], maxMatches: number, searchStart = 0, searchEnd = entries.length): SparseMatch[] {
   const matches: SparseMatch[] = [];
-  for (let start = searchStart; start <= entries.length && matches.length < maxMatches; start += 1) {
-    collectSparseMatches({ entries, ops, opIndex: 0, position: start, start, lineIndexes: new Map(), ranges: new Map(), matches, maxMatches });
+  for (let start = searchStart; start <= entries.length && start <= searchEnd && matches.length < maxMatches; start += 1) {
+    collectSparseMatches({ entries, ops, opIndex: 0, position: start, start, searchEnd, lineIndexes: new Map(), ranges: new Map(), matches, maxMatches });
   }
   return matches;
 }
@@ -343,6 +355,7 @@ function collectSparseMatches(state: {
   opIndex: number;
   position: number;
   start: number;
+  searchEnd: number;
   lineIndexes: Map<number, number>;
   ranges: Map<number, { start: number; end: number }>;
   matches: SparseMatch[];
@@ -351,12 +364,15 @@ function collectSparseMatches(state: {
   if (state.matches.length >= state.maxMatches) return;
   const opIndex = nextMatchOpIndex(state.ops, state.opIndex);
   if (opIndex === undefined) {
-    state.matches.push({ start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges });
+    if (state.position <= state.searchEnd) {
+      state.matches.push({ start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges });
+    }
     return;
   }
 
   const op = state.ops[opIndex];
   if (isMatchOp(op)) {
+    if (state.position >= state.searchEnd) return;
     const entry = state.entries[state.position];
     if (!entry || !lineMatchesOp(entry, op)) return;
     const lineIndexes = new Map(state.lineIndexes);
@@ -365,7 +381,7 @@ function collectSparseMatches(state: {
     return;
   }
 
-  for (let end = state.position; end <= state.entries.length && state.matches.length < state.maxMatches; end += 1) {
+  for (let end = state.position; end <= state.entries.length && end <= state.searchEnd && state.matches.length < state.maxMatches; end += 1) {
     const ranges = new Map(state.ranges);
     ranges.set(opIndex, { start: state.position, end });
     collectSparseMatches({ ...state, opIndex: opIndex + 1, position: end, ranges });
@@ -383,9 +399,10 @@ function renderSkippedContextRange(lineCount: number): string {
   return lineCount === 0 ? "..." : `... ${lineCount} skipped context line${lineCount === 1 ? "" : "s"}`;
 }
 
-function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0): number[] {
+function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0, searchEnd = entries.length): number[] {
   const matches: number[] = [];
-  for (let index = searchStart; index <= entries.length - sequence.length; index += 1) {
+  const lastStart = Math.min(entries.length - sequence.length, searchEnd - sequence.length);
+  for (let index = searchStart; index <= lastStart; index += 1) {
     if (sequence.every((op, offset) => lineMatchesOp(entries[index + offset], op))) {
       matches.push(index);
       if (matches.length >= 2) break;

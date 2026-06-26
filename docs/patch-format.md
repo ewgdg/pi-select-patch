@@ -25,7 +25,7 @@ Preferred `patch` input is Codex-like and carries file paths. The tool accepts e
  :exact context text
 -:text to delete
  #HHHH
-@@ @120
+@@ @120...140
  :start context text
  ...
 +literal insertion after skipped context
@@ -64,7 +64,7 @@ Update sections use hashline hunks:
  :exact context text
 -:text to delete
 +literal inserted content
-@@ @120
+@@ @120...140
  :start context text
  ...
 +literal insertion after skipped context
@@ -78,7 +78,7 @@ Update sections use hashline hunks:
 
 Rules:
 
-- Hunk header must be `@@` or `@@ @<line>`. `@@ @<line>` is a hunk anchor hint: start searching at 1-based line `<line>`, and the resolved match start must be at or after that line.
+- Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
 - Operations use one operation char plus a selector: ` :<text>` = exact context text, `-:<text>` = exact delete text, `+<text>` = literal insertion, ` #<hash>` = hash context, `-#<hash>` = hash delete, ` ...` = skipped context range, `-...` = delete range.
 - Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.

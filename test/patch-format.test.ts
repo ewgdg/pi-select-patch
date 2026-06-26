@@ -5,14 +5,16 @@ const row = (prefix: " " | "-" | "+", content: string) => prefix === "+" ? `${pr
 
 describe("patch parser", () => {
   it("accepts hunk anchor hints", () => {
-    const parsed = parsePatch(["@@ @12", " :ctx"].join("\n"));
+    const parsed = parsePatch(["@@ @12", " :ctx", "@@ @3...7", " :other"].join("\n"));
 
     expect(parsed.hunks[0]).toMatchObject({ anchorHint: { line: 12 } });
     expect(parsed.hunks[0].ops).toMatchObject([{ kind: "context", content: "ctx" }]);
+    expect(parsed.hunks[1]).toMatchObject({ anchorHint: { line: 3, endLine: 7 } });
+    expect(parsed.hunks[1].ops).toMatchObject([{ kind: "context", content: "other" }]);
   });
 
   it("rejects malformed hunk anchor hints", () => {
-    for (const header of ["@@ @0", "@@ @-1", "@@ @abc", "@@ @12 extra", "@@ @ 12"]) {
+    for (const header of ["@@ @0", "@@ @-1", "@@ @abc", "@@ @12 extra", "@@ @ 12", "@@ @1...0", "@@ @3...2", "@@ @1...abc", "@@ @1 ...3", "@@ @1... 3"]) {
       expect(() => parsePatch([header, " :ctx"].join("\n"))).toThrow("[E_INVALID_PATCH]");
     }
   });

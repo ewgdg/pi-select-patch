@@ -57,7 +57,7 @@ Preferred syntax is Codex-like universal patch text:
  :exact context text
 -:text to delete
 +literal inserted line
-@@ @120
+@@ @120...140
  :start context text
  ...
 +literal insertion after skipped context
@@ -71,7 +71,7 @@ Preferred syntax is Codex-like universal patch text:
 *** End Patch
 ```
 
-Update hunks use operation+selector syntax: ` :<text>` for exact context text, `-:<text>` for exact delete text, `+<text>` for literal insertion, ` #<hash>` for hash context, and `-#<hash>` for hash delete. Hunk headers are `@@` or `@@ @<line>`; the optional hunk anchor hint starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. ` ...` preserves a skipped context range between surrounding context operations; `-...` deletes that range. Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal new content directly after `+`; do not include hashes in `+` lines unless those hash characters are intended file content. Exactly one contiguous or sparse match is required. No fuzzy fallback, line-number matching, duplicate counters, or perfect hashing.
+Update hunks use operation+selector syntax: ` :<text>` for exact context text, `-:<text>` for exact delete text, `+<text>` for literal insertion, ` #<hash>` for hash context, and `-#<hash>` for hash delete. Hunk headers are `@@`, `@@ @<line>`, or `@@ @<start>...<end>`; `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`. ` ...` preserves a skipped context range between surrounding context operations; `-...` deletes that range. Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal new content directly after `+`; do not include hashes in `+` lines unless those hash characters are intended file content. Exactly one contiguous or sparse match is required. No fuzzy fallback, line-number matching, duplicate counters, or perfect hashing.
 
 Success output is compact and model-visible: file operation headers plus hash-only receipt/status. Receipt rows like ` HHHH` and `+HHHH` are status output, not patch hash locator syntax; use ` #HHHH` or `-#HHHH` in patch input. `details.diff` is a human patch transcript for host/UI, not a whole-file diff. Update entries show only the resolved input hunk lines; Delete File omits deleted file content.
 

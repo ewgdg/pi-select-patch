@@ -91,7 +91,11 @@ function serializeHunkHeader(hunk: Patch["hunks"][number]): string {
   if (!Number.isSafeInteger(hunk.anchorHint.line) || hunk.anchorHint.line < 1) {
     throw new InvalidPatchError("Hunk anchor hint line must be a safe positive integer.");
   }
-  return `@@ @${hunk.anchorHint.line}`;
+  if (hunk.anchorHint.endLine === undefined) return `@@ @${hunk.anchorHint.line}`;
+  if (!Number.isSafeInteger(hunk.anchorHint.endLine) || hunk.anchorHint.endLine < 1 || hunk.anchorHint.line > hunk.anchorHint.endLine) {
+    throw new InvalidPatchError("Hunk anchor hint range must use safe positive integers with start less than or equal to end.");
+  }
+  return `@@ @${hunk.anchorHint.line}...${hunk.anchorHint.endLine}`;
 }
 
 function serializePatchOp(op: Patch["hunks"][number]["ops"][number]): string {

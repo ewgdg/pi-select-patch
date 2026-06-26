@@ -44,7 +44,7 @@ describe("universal patch parser", () => {
       "*** Add File: added.txt",
       "+hello",
       "*** Update File: existing.txt",
-      "@@ @3",
+      "@@ @3...9",
       row(" ", "ctx"),
       row("-", "old"),
       " :ctx",
@@ -59,7 +59,7 @@ describe("universal patch parser", () => {
     const serialized = serializeUniversalPatch(parseUniversalPatch(source).operations);
 
     expect(serialized).toBe(source);
-    expect(serialized).toContain("@@ @3");
+    expect(serialized).toContain("@@ @3...9");
     expect(serialized).toContain(` #${hashLine("ctx")}`);
     expect(serialized).toContain(`-#${hashLine("old")}`);
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);

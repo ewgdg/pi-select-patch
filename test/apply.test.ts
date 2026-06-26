@@ -10,6 +10,7 @@ import {
 const row = (prefix: " " | "-" | "+", content: string, hashFn = hashLine) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashFn(content)}`;
 const patch = (...lines: string[]) => ["@@", ...lines].join("\n");
 const anchoredPatch = (line: number, ...lines: string[]) => [`@@ @${line}`, ...lines].join("\n");
+const anchoredRangePatch = (startLine: number, endLine: number, ...lines: string[]) => [`@@ @${startLine}...${endLine}`, ...lines].join("\n");
 
 describe("applyPatchToText", () => {
   it("replaces one line with unique surrounding context", () => {
@@ -64,6 +65,32 @@ describe("applyPatchToText", () => {
 
   it("reports ambiguity at or after hunk anchor hints", () => {
     expect(() => applyPatchToText("x\nx\nx", anchoredPatch(2, "-:x"))).toThrow(/matched 2 spans at or after line 2/);
+  });
+
+  it("uses hunk anchor range hints for contiguous matches", () => {
+    const result = applyPatchToText("target\nx\ntarget", anchoredRangePatch(2, 3, "-:target"));
+
+    expect(result.text).toBe("target\nx");
+    expect(result.hunkAudits[0].matchStart).toBe(2);
+  });
+
+  it("rejects contiguous matches ending after hunk anchor ranges", () => {
+    expect(() => applyPatchToText("a\nb", anchoredRangePatch(1, 1, " :a", " :b"))).toThrow(/within lines 1\.\.\.1/);
+  });
+
+  it("uses hunk anchor range hints for sparse matches", () => {
+    const result = applyPatchToText("start\nold\nend\npad\nstart\nold\nend", anchoredRangePatch(5, 7, " :start", "-...", " :end"));
+
+    expect(result.text).toBe("start\nold\nend\npad\nstart\nend");
+    expect(result.hunkAudits[0].matchStart).toBe(4);
+  });
+
+  it("rejects sparse matches ending after hunk anchor ranges", () => {
+    expect(() => applyPatchToText("start\nold\nend", anchoredRangePatch(1, 2, " :start", "-...", " :end"))).toThrow(/within lines 1\.\.\.2/);
+  });
+
+  it("reports ambiguity within hunk anchor ranges", () => {
+    expect(() => applyPatchToText("x\nx\nx", anchoredRangePatch(2, 3, "-:x"))).toThrow(/matched 2 spans within lines 2\.\.\.3/);
   });
 
   it("rejects hunk anchor hints on pure insert hunks", () => {
