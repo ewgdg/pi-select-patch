@@ -1,6 +1,6 @@
 import { InvalidPatchError } from "./errors.js";
 import { type HashFunction, hashLine } from "./hash.js";
-import { parsePatch, type Patch } from "./patch-format.js";
+import { normalizeCombinedTextSelector, parsePatch, type Patch } from "./patch-format.js";
 
 export type UniversalPatchOperation = AddFileOperation | UpdateFileOperation | DeleteFileOperation;
 
@@ -101,8 +101,11 @@ function serializeHunkHeader(hunk: Patch["hunks"][number]): string {
 function serializePatchOp(op: Patch["hunks"][number]["ops"][number]): string {
   if (op.kind === "range") return rangePatchOp(op.rangeKind);
   if (op.kind === "insert") return `+${op.content}`;
-  if (op.hash !== undefined && op.content !== undefined) {
+  if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) {
     throw new InvalidPatchError("Hash+text locators are not supported; serialize hash-only or text-only patch operations.");
+  }
+  if (op.content !== undefined && op.combinedSelector !== undefined) {
+    throw new InvalidPatchError("Mixed text locators are not supported; serialize exactly one text locator form.");
   }
   if (op.hash !== undefined) return `${hashPatchOpPrefix(op.kind)}${op.hash}`;
   return serializeTextSelector(op);
@@ -110,6 +113,10 @@ function serializePatchOp(op: Patch["hunks"][number]["ops"][number]): string {
 
 function serializeTextSelector(op: Patch["hunks"][number]["ops"][number]): string {
   if (op.kind === "insert" || op.kind === "range") return "";
+  if (op.combinedSelector !== undefined) {
+    const combinedSelector = normalizeCombinedTextSelector(op.combinedSelector, "Combined selector");
+    return `${op.kind === "context" ? " ?" : "-?"}${JSON.stringify(combinedSelector)}`;
+  }
   if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
   if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
   if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;

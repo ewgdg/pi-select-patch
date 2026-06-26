@@ -79,6 +79,38 @@ describe("patch parser", () => {
     ]);
   });
 
+  it("parses combined text context/delete locators and normalizes contains", () => {
+    const parsed = parsePatch([
+      "@@",
+      ' ?{"prefix":"function ","contains":"parse","suffix":" {"}',
+      '-?{"contains":["old","value"]}'
+    ].join("\n"));
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", combinedSelector: { prefix: "function ", contains: ["parse"], suffix: " {" } },
+      { kind: "delete", combinedSelector: { contains: ["old", "value"] } }
+    ]);
+  });
+
+  it("rejects malformed combined text locators", () => {
+    for (const selector of [
+      ' ?not-json',
+      ' ?[]',
+      ' ?"text"',
+      ' ?{}',
+      ' ?{"unknown":"x"}',
+      ' ?{"prefix":""}',
+      ' ?{"prefix":1}',
+      ' ?{"suffix":""}',
+      ' ?{"contains":""}',
+      ' ?{"contains":[]}',
+      ' ?{"contains":["ok",""]}',
+      ' ?{"contains":[1]}'
+    ]) {
+      expect(() => parsePatch(["@@", selector].join("\n"))).toThrow("[E_INVALID_PATCH]");
+    }
+  });
+
   it("keeps caret, star, and dollar text selectors exact behind colon", () => {
     const parsed = parsePatch(["@@", " :^literal", "-:*literal", " :cost$"].join("\n"));
 

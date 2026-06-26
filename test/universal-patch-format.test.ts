@@ -49,6 +49,7 @@ describe("universal patch parser", () => {
       row("-", "old"),
       " ^ctx",
       " *middle",
+      ' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}',
       " ...",
       row("+", "new"),
       "-...",
@@ -65,11 +66,12 @@ describe("universal patch parser", () => {
     expect(serialized).toContain(`-#${hashLine("old")}`);
     expect(serialized).toContain(" ^ctx");
     expect(serialized).toContain(" *middle");
+    expect(serialized).toContain(' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}');
     expect(serialized).toContain(" $after");
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
-  it("round-trips exact, prefix, contains, and suffix text selectors with marker characters", () => {
+  it("round-trips exact, prefix, contains, combined, and suffix text selectors with marker characters", () => {
     const serialized = serializeUniversalPatch([
       {
         kind: "update",
@@ -81,6 +83,7 @@ describe("universal patch parser", () => {
               { kind: "delete", content: "literal$", textSelector: "exact" },
               { kind: "context", content: "^suffix", textSelector: "suffix" },
               { kind: "context", content: "middle", textSelector: "contains" },
+              { kind: "delete", combinedSelector: { prefix: "$prefix", contains: ["middle"], suffix: "^suffix" } },
               { kind: "delete", content: "$prefix", textSelector: "prefix" }
             ]
           }]
@@ -98,6 +101,7 @@ describe("universal patch parser", () => {
             { kind: "delete", content: "literal$", textSelector: "exact" },
             { kind: "context", content: "^suffix", textSelector: "suffix" },
             { kind: "context", content: "middle", textSelector: "contains" },
+            { kind: "delete", combinedSelector: { prefix: "$prefix", contains: ["middle"], suffix: "^suffix" } },
             { kind: "delete", content: "$prefix", textSelector: "prefix" }
           ]
         }]
@@ -105,7 +109,7 @@ describe("universal patch parser", () => {
     });
   });
 
-  it("rejects serializing invalid hash+text match operations", () => {
+  it("rejects serializing invalid mixed locator operations", () => {
     expect(() => serializeUniversalPatch([
       {
         kind: "update",
@@ -113,5 +117,29 @@ describe("universal patch parser", () => {
         patch: { hunks: [{ ops: [{ kind: "context", hash: hashLine("ctx"), content: "ctx" }] }] }
       }
     ])).toThrow("Hash+text locators are not supported");
+
+    expect(() => serializeUniversalPatch([
+      {
+        kind: "update",
+        path: "existing.txt",
+        patch: { hunks: [{ ops: [{ kind: "context", hash: hashLine("ctx"), combinedSelector: { contains: ["ctx"] } }] }] }
+      }
+    ])).toThrow("Hash+text locators are not supported");
+
+    expect(() => serializeUniversalPatch([
+      {
+        kind: "update",
+        path: "existing.txt",
+        patch: { hunks: [{ ops: [{ kind: "context", content: "ctx", combinedSelector: { contains: ["ctx"] } }] }] }
+      }
+    ])).toThrow("Mixed text locators are not supported");
+
+    expect(() => serializeUniversalPatch([
+      {
+        kind: "update",
+        path: "existing.txt",
+        patch: { hunks: [{ ops: [{ kind: "context", combinedSelector: {} }] }] }
+      }
+    ])).toThrow("requires at least one");
   });
 });

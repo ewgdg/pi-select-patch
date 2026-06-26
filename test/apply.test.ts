@@ -73,13 +73,36 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" *computeOld", "-*turn val", " *ished"]);
   });
 
+  it("matches combined text locators by all supplied predicates", () => {
+    const result = applyPatchToText(
+      "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}\nfinished();",
+      patch(
+        ' ?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
+        '-?{"prefix":"  return","contains":"old","suffix":";"}',
+        "+  return newValue;",
+        " :}",
+        ' ?{"contains":"finished"}'
+      )
+    );
+
+    expect(result.text).toBe("function parsePatchOp(line: string): PatchOp {\n  return newValue;\n}\nfinished();");
+    expect(result.hunkAudits[0].matchPattern).toEqual([
+      ' ?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
+      '-?{"prefix":"  return","contains":["old"],"suffix":";"}',
+      " :}",
+      ' ?{"contains":["finished"]}'
+    ]);
+  });
+
   it("throws stale and ambiguous for prefix, contains, and suffix locators", () => {
     expect(() => applyPatchToText("alpha one", patch("-^beta"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("one omega", patch("-*alpha"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("one omega", patch("-$alpha"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("prefix alpha suffix", patch('-?{"prefix":"prefix","contains":"missing","suffix":"suffix"}'))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("alpha one\nalpha two", patch("-^alpha"))).toThrow(AmbiguousHunkError);
     expect(() => applyPatchToText("one omega\ntwo omega", patch("-*omega"))).toThrow(AmbiguousHunkError);
     expect(() => applyPatchToText("one omega\ntwo omega", patch("-$omega"))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("prefix alpha suffix\nprefix beta suffix", patch('-?{"prefix":"prefix","suffix":"suffix"}'))).toThrow(AmbiguousHunkError);
   });
 
   it("matches context/delete locators by hash-only and text-only forms", () => {
@@ -145,6 +168,14 @@ describe("applyPatchToText", () => {
 
   it("rejects API match ops containing both hash and text", () => {
     expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), content: "target" }] }] })).toThrow("hash+text locators are not supported");
+    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), combinedSelector: { contains: ["target"] } }] }] })).toThrow("hash+text locators are not supported");
+    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", content: "target", combinedSelector: { contains: ["target"] } }] }] })).toThrow("mixed text locators are not supported");
+  });
+
+  it("rejects malformed API combined selector locators", () => {
+    expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: {} }] }] })).toThrow("requires at least one");
+    expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: { contains: [] } }] }] })).toThrow("contains");
+    expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: { unknown: "target" } as never }] }] })).toThrow("unknown key");
   });
 
   it("matches blank-line and separator-leading text locators", () => {
