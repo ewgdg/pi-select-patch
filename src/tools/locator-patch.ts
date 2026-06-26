@@ -25,6 +25,172 @@ import { parseText, serializeText } from "../text-lines.js";
 import { parsePatchInput, serializeUniversalPatch, type AddFileOperation, type UniversalPatchOperation } from "../universal-patch-format.js";
 import { buildPatchResultRenderText, getPatchResultText } from "./patch-render.js";
 
+function dedentBlock(text: string): string {
+  const lines = text.split("\n");
+  let firstContentLine = 0;
+  while (firstContentLine < lines.length && lines[firstContentLine]?.trim().length === 0) {
+    firstContentLine += 1;
+  }
+
+  let lastContentLine = lines.length - 1;
+  while (lastContentLine >= firstContentLine && lines[lastContentLine]?.trim().length === 0) {
+    lastContentLine -= 1;
+  }
+
+  const contentLines = lines.slice(firstContentLine, lastContentLine + 1);
+  const sharedIndent = Math.min(
+    ...contentLines.filter((line) => line.trim().length > 0).map((line) => line.match(/^\s*/)?.[0].length ?? 0)
+  );
+
+  return contentLines.map((line) => line.slice(Math.min(sharedIndent, line.length))).join("\n");
+}
+
+const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
+  <description>
+    Inline patch text. Mutually exclusive with \`patch_file\`.
+    ## Wrappers
+    Patch must start with \`*** Begin Patch\` and end with \`*** End Patch\`.
+    ## File Sections
+    A patch may contain multiple \`*** Add File\`, \`*** Update File\`, and \`*** Delete File\` sections;
+    A file section header includes a file path.
+    e.g. \`*** Add File: path/to/file.txt\`
+    ### Add File
+    \`Add File\` sections contain body rows only: \`+<text>\`. They do not use \`@@\` hunks.
+    ## Hunk Sections
+    Each \`Update File\` section may contain multiple \`@@\` hunks.
+    Hunk headers are \`@@\`.
+    ### Line Anchor
+    A line anchor can be appended to a hunk header.
+    Line number is 1-based.
+    A hunk with a line anchor looks like: \`@@ @<line>\`, or \`@@ @<start>...<end>\`;
+    \`@@ @<line>\` starts searching at 1-based line \`<line>\` and requires the resolved match start to be at or after that line, while \`@@ @<start>...<end>\` requires the resolved match span to stay within inclusive 1-based line range [start, end].
+    ### Hunk Match
+    A hunk can contain line matchers.
+    The syntax for line matcher is \`<operator><selector><locator>\`.
+    Line matches in a hunk section are grouped to form a hunk match.
+    Only \`Update File\` section can have hunk match.
+    e.g. \`-:<text>\`, \`=:<text>\`
+    #### Match Operators
+    Match operator can be either "-", "=".
+    "-" operator is used to delete the matched line.
+    "=" operator is a context only noop for matching/anchoring only.
+    #### Selectors
+    Selectors specify the locator types.
+    ":" is a text selector for exact match of the locator followed it.
+    "^" is a prefix selector.
+    "$" is a suffix selector.
+    "*" is a contains selector.
+    "#" is a hash selector.
+    "?" is a combined selector.
+    "..." is a range selector.
+    ##### Range Selector
+    A range selector has to be used in-between other line matchers.
+    It has no following locators.
+    \`=...\` preserves lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
+    #### Locators
+    Locators are selector-specific text, hash, JSON, or no text for \`...\`.
+    e.g. \`=:<text>\` means exact context text match; \`-:<text>\` means exact delete text match.
+    ##### Contains Locator
+    \`*<text>\` means the line should contains the <text>.
+    ##### Combined Locator
+    A combined locator is a JSON object follows combined selector.
+    Currently, "prefix", "suffix", "contains" are allowed selector keys.
+    "contains" key can be mapped to a string or an array of strings.
+    The JSON object should contains at least one key.
+    e.g. \`{"prefix":"a","contains":["b","c"],"suffix":"d"}\`
+    ### Insertion
+    Patch uses "+" operator to insert lines.
+    The syntax is \`+<text>\`, where \`<text>\` is a raw string for a line content.
+    Only hunk sections or \`Add File\` sections are allowed to insert lines.
+  </description>
+
+  <examples>
+    <example description="range selection">
+      <content>
+        aaa
+        bbb
+        ccc
+        ddd
+      </content>
+      <patch description="bulk delete all">
+        *** Begin Patch
+        *** Update File: path/to/file.txt
+        @@
+        -:aaa
+        -...
+        -^d
+        *** End Patch
+      </patch>
+      <explanation>
+        find a hunk with first line matches "aaa" and last line starts with "d".
+        delete the first line and last line.
+        delete lines in-between first and last line using range selector.
+        result is that all lines are deleted.
+      </explanation>
+    </example>
+    <example description="disambiguate from duplicate lines">
+      <content>
+        aaa
+        aaa
+        ccc
+        ccc
+      </content>
+      <patch>
+        *** Begin Patch
+        *** Update File: path/to/file.txt
+        @@ @2
+        =:aaa
+        +bbb
+        *** End Patch
+      </patch>
+      <explanation>
+        use line anchor to search at or after line 2.
+        so it can locate the only match for "aaa" at line 2.
+        similarly, we can use "@2...2" to pin the line range to [2,2].
+        then insert a new line after.
+        <content description="result after patch">
+          aaa
+          aaa
+          bbb
+          ccc
+          ccc
+        </content>
+      </explanation>
+      <patch>
+        *** Begin Patch
+        *** Update File: path/to/file.txt
+        @@
+        =:aaa
+        +bbb
+        =:ccc
+        *** End Patch
+      </patch>
+      <explanation>
+        find a hunk with adjacent "aaa" and "ccc" lines.
+        insert a new line "bbb" in-between.
+      </explanation>
+    </example>
+    <example description="use combined selector">
+      <content>
+        abcd
+        cbdd
+        acbb
+      </content>
+      <patch description="delete the line 'abcd'">
+        *** Begin Patch
+        *** Update File: path/to/file.txt
+        @@
+        -?{"prefix":"a","suffix":"d"}
+        *** End Patch
+      </patch>
+      <explanation>
+        the locator targets line starts with "a" and ends with "d".
+        the only match is "abcd".
+      </explanation>
+    </example>
+  </examples>
+`);
+
 interface PatchStatusDecision {
   text: string;
   omitted: boolean;
@@ -59,18 +225,14 @@ export const patchTool = defineTool({
   description: "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
   promptSnippet: "Prefer for normal token-efficient file edits; supports multi-file changes in one patch call.",
   promptGuidelines: [
-    "`patch` tool finds update targets by explicit context/delete locators. No fuzzy matching.",
-    "Context/delete rows use `<operation><selector><locator>` syntax. The selector after the operation character must be `:`, `^`, `*`, `?`, `$`, `#`, or `...`. Raw diff rows like ` function foo()` are invalid; use exact selector row `=:function foo()`.",
-    "Insert lines use raw content after `+`. Do not include hashes in `+` lines unless those hash characters are intended file content.",
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. For large patches, save output tokens by editing the retry patch file and passing it via `patch_file` instead of re-emitting large patch text.",
-    "On `patch` tool success, agent-visible output is compact file status only. It does not include file content or post-apply hashes; use `read` with `includeHashes: true` when hashes are needed."
+    "On `patch` tool success, agent-visible output is compact file status only."
   ],
   parameters: Type.Object(
     {
       patch: Type.Optional(
         Type.String({
-          description:
-            "Inline patch text. Mutually exclusive with `patch_file`. Must start with `*** Begin Patch` and end with `*** End Patch`. May contain multiple `*** Add File`, `*** Update File`, and `*** Delete File` sections; `*** Update File` sections may contain multiple `@@` hunks. Update hunk headers are `@@`, `@@ @<line>`, or `@@ @<start>...<end>`; `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line, while `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`. Update hunk context/delete rows use `<operation><selector><locator>` syntax: `=:<text>` exact context text, `-:<text>` exact delete text, `=^<prefix>` prefix context text, `-^<prefix>` prefix delete text, `=*<needle>` contains context text, `-*<needle>` contains delete text, `=?{...}` combined context text, `-?{...}` combined delete text, `=$<suffix>` suffix context text, `-$<suffix>` suffix delete text, `=#<hash>` 3/4-char hash context, `-#<hash>` 3/4-char hash delete, `=...` context range, and `-...` delete range. Insert rows use `+<content>` and have no selector. Combined selector JSON allows `prefix`, `contains`, and `suffix`; all supplied predicates must match the same line. Context/delete rows must use selectors; raw diff rows like ` function foo()` are invalid, use `=:function foo()`. Do not use read-output `HASH│content` rows as patch operations. Insert lines use raw `+{text}` content; do not include hashes in `+` lines unless those hash characters are intended file content. Example:\n```\n*** Begin Patch\n*** Update File: path/to/file.txt\n@@ @120...140\n=:start context\n=...\n=#ABC\n-...\n+replacement text\n=:end context\n*** End Patch\n```"
+          description: PATCH_PARAMETER_DESCRIPTION
         })
       ),
       patch_file: Type.Optional(
