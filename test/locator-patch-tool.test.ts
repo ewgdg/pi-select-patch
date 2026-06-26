@@ -46,17 +46,17 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
   return { dir, file, result };
 }
 
-describe("patch visible receipt", () => {
-  it("is agent-visible as patch and returns post-edit hash-only receipt without deleted hashes or file content", async () => {
+describe("patch visible status", () => {
+  it("is agent-visible as compact status without hashes or file content", async () => {
     const diff = ["@@", row("=", "a"), row("-", "old"), row("+", "new"), row("=", "z")].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
     expect(patchTool.name).toBe("patch");
-    expect(resultText(result)).toBe(
-      ["*** Update File: file.txt", "@@ result", `=${hashLine("a")}`, `+${hashLine("new")}`, `=${hashLine("z")}`].join("\n")
-    );
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     expect(resultText(result)).not.toContain(hashLine("old"));
+    expect(resultText(result)).not.toContain(hashLine("a"));
+    expect(resultText(result)).not.toContain(hashLine("new"));
     expect(resultText(result)).not.toContain("old");
     expect(resultText(result)).not.toContain("new");
     await expect(readFile(file, "utf8")).resolves.toBe("a\nnew\nz\n");
@@ -67,9 +67,7 @@ describe("patch visible receipt", () => {
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
-    expect(resultText(result)).toBe(
-      ["*** Update File: file.txt", "@@ result", `=${hashLine("a")}`, `+${hashLine("new")}`, `=${hashLine("z")}`].join("\n")
-    );
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     await expect(readFile(file, "utf8")).resolves.toBe("a\nnew\nz\n");
   });
 
@@ -117,13 +115,13 @@ describe("patch visible receipt", () => {
     expect(diff.split("\n")).toHaveLength(7);
   });
 
-  it("adds a new file from a universal Add File section and shows hash-only add receipt", async () => {
+  it("adds a new file from a universal Add File section and shows compact status", async () => {
     const dir = await makeTempDir();
     const patch = ["*** Begin Patch", "*** Add File: added.txt", "+hello", "+world", "*** End Patch"].join("\n");
 
     const result = await patchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never);
 
-    expect(resultText(result)).toBe(["*** Add File: added.txt", `+${hashLine("hello")}`, `+${hashLine("world")}`].join("\n"));
+    expect(resultText(result)).toBe(["*** Add File: added.txt", "Applied"].join("\n"));
     expect(resultText(result)).not.toContain("hello");
     expect(resultText(result)).not.toContain("world");
     expect(detailsDiff(result)).toContain("--- /dev/null");
@@ -154,7 +152,7 @@ describe("patch visible receipt", () => {
     await expect(readFile(join(dir, "added.txt"), "utf8")).resolves.toBe("already");
   });
 
-  it("writes Add File blank lines so receipt, diff, and file bytes agree", async () => {
+  it("writes Add File blank lines so status, diff, and file bytes agree", async () => {
     const dir = await makeTempDir();
     const patch = ["*** Begin Patch", "*** Add File: blank.txt", "+", "*** End Patch"].join("\n");
 
@@ -163,11 +161,11 @@ describe("patch visible receipt", () => {
 
     expect(writtenText).toBe("\n");
     expect(parseText(writtenText).lines).toEqual([""]);
-    expect(resultText(result)).toBe(["*** Add File: blank.txt", `+${hashLine("")}`].join("\n"));
+    expect(resultText(result)).toBe(["*** Add File: blank.txt", "Applied"].join("\n"));
     expect(detailsDiff(result).split("\n").at(-1)).toBe("+");
   });
 
-  it("preserves Add File trailing blank rows in bytes, receipt, and details diff", async () => {
+  it("preserves Add File trailing blank rows in bytes, status, and details diff", async () => {
     const dir = await makeTempDir();
     const patch = ["*** Begin Patch", "*** Add File: trailing.txt", "+hello", "+", "*** End Patch"].join("\n");
 
@@ -176,7 +174,7 @@ describe("patch visible receipt", () => {
 
     expect(writtenText).toBe("hello\n\n");
     expect(parseText(writtenText).lines).toEqual(["hello", ""]);
-    expect(resultText(result)).toBe(["*** Add File: trailing.txt", `+${hashLine("hello")}`, `+${hashLine("")}`].join("\n"));
+    expect(resultText(result)).toBe(["*** Add File: trailing.txt", "Applied"].join("\n"));
     expect(detailsDiff(result).split("\n").slice(-2)).toEqual(["+hello", "+"]);
   });
 
@@ -409,7 +407,7 @@ describe("patch visible receipt", () => {
     await expect(readFile(target, "utf8")).resolves.toBe("a\nb");
   });
 
-  it("omits oversized full-file receipts without exposing inserted content", async () => {
+  it("omits oversized full-file statuses without exposing inserted content", async () => {
     const manyLines = Array.from({ length: 2100 }, (_, index) => `line-${index}`);
     const universal = [
       "*** Begin Patch",
@@ -422,17 +420,17 @@ describe("patch visible receipt", () => {
 
     const { file, result } = await patchFile("old", universal);
 
-    expect(resultText(result)).toMatch(/Patch applied\. Receipt omitted: .*visible cap/);
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     expect(resultText(result)).not.toContain("line-1");
     await expect(readFile(file, "utf8")).resolves.toBe(manyLines.join("\n"));
   });
 
-  it("omits empty receipts", async () => {
+  it("omits empty statuses", async () => {
     const diff = ["@@", row("-", "only")].join("\n");
 
     const { file, result } = await patchFile("only", diff);
 
-    expect(resultText(result)).toBe("Patch applied. Receipt omitted: no visible hash receipt.");
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     await expect(readFile(file, "utf8")).resolves.toBe("");
   });
 });

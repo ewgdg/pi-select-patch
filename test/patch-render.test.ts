@@ -18,10 +18,10 @@ const makeDiff = (lineCount: number) => Array.from({ length: lineCount }, (_, in
 
 describe("patch result renderer helpers", () => {
   it("extracts model-visible text and details diff without changing either payload", () => {
-    const result = { content: [{ type: "text", text: "compact receipt" }] };
+    const result = { content: [{ type: "text", text: "compact status" }] };
     const details = { diff: "--- a/file\n+++ b/file\n-old\n+new" };
 
-    expect(getPatchResultText(result)).toBe("compact receipt");
+    expect(getPatchResultText(result)).toBe("compact status");
     expect(getPatchResultDiff(details)).toBe(details.diff);
     expect(getPatchResultDiff({ diff: "" })).toBeUndefined();
   });
@@ -71,20 +71,20 @@ describe("patch result renderer helpers", () => {
     ).toBe("<error>Error: stale</error>");
     expect(
       buildPatchResultRenderText({
-        resultText: "Patch applied. Receipt omitted: no visible hash receipt.",
+        resultText: "*** Update File: file.txt\nApplied",
         details: {},
         expanded: false,
         isPartial: false,
         isError: false,
         theme
       })
-    ).toBe("<success>Patch applied. Receipt omitted: no visible hash receipt.</success>");
+    ).toBe("<success>*** Update File: file.txt</success>");
   });
 
-  it("builds human render text from details.diff while keeping receipt content separate", () => {
+  it("builds human render text from details.diff while keeping status content separate", () => {
     const diff = ["--- a/file", "+++ b/file", "@@ -1,1 +1,1 @@", "-old", "+new"].join("\n");
     const rendered = buildPatchResultRenderText({
-      resultText: "*** Update File: file\n@@ result\n+HASH",
+      resultText: "*** Update File: file\nValidated",
       details: { dryRun: true, diff },
       expanded: false,
       isPartial: false,

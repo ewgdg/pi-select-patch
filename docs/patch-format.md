@@ -53,7 +53,7 @@ Patch must start with `*** Begin Patch` and end with `*** End Patch`. One operat
 - Each body row starts with `+`; text after `+` is literal file content.
 - Do not include hashes in `+` lines unless those hash characters are intended file content.
 - New file content is written as rows joined with `\n`; no implicit final newline is added.
-- Visible receipt exposes only header and `+HASH` rows, never content.
+- Visible status exposes only the Add File header and `Applied`, never content or hashes.
 
 ## Update File
 
@@ -99,32 +99,22 @@ Delete sections match Codex syntax and contain no body:
 *** Delete File: old.txt
 ```
 
-Delete is a hard delete of the resolved regular file after validation. Validation requires an existing UTF-8 text file. Visible receipt for delete is header plus `Deleted file`; deleted content is not visible.
+Delete is a hard delete of the resolved regular file after validation. Validation requires an existing UTF-8 text file. Visible status for delete is header plus `Deleted file`; deleted content is not visible.
 
-## Success receipt
+## Success status
 
-`patch` success output is compact, not a full patched file and not a content diff:
+`patch` success output is compact, not a full patched file, not a content diff, and not a hash receipt:
 
 ```text
 *** Add File: new.txt
-+HHHH
+Applied
 *** Update File: existing.txt
-@@ result
-=HHHH
-+HHHH
-=HHHH
+Applied
 *** Delete File: old.txt
 Deleted file
 ```
 
-Update receipt lines include only:
-
-- `=HHHH` for context lines that survived in current file.
-- `+HHHH` for newly inserted lines.
-
-Receipt rows are status output, not patch input syntax. Use `=#HHH`/`=#HHHH` for hash context and `-#HHH`/`-#HHHH` for hash delete in patch input.
-
-Deleted hashes are omitted from visible output. If receipt has no surviving context or inserted hashes, or exceeds visible output caps, patch still writes after valid apply and returns compact status.
+Visible status rows include only file operation headers plus `Applied`, `Validated` for dry runs, or `Deleted file`. They do not include file content or post-apply hashes. Use `read` with `includeHashes: true` when current hashes are needed.
 
 ## `details.diff`
 
@@ -132,4 +122,4 @@ Tool result details include `details.diff`: a human patch transcript for host/UI
 
 ## Collision risk
 
-Visible hash locators expose 18 bits at 3 characters or 24 bits at 4 characters. Collisions are accepted behavior. Hash-only locators match by hash prefix only. Use text-only locators when exact content is needed. Context lines in receipt preserve actual target hashes after apply.
+Visible hash locators expose 18 bits at 3 characters or 24 bits at 4 characters. Collisions are accepted behavior. Hash-only locators match by hash prefix only. Use text-only locators when exact content is needed. Use `read` with `includeHashes: true` to retrieve current target hashes after apply.

@@ -80,17 +80,15 @@ Preferred syntax is Codex-like universal patch text:
 
 Update hunk context/delete rows use `<operation><selector><locator>` syntax: `=` or `-` operation, then selector `:`, `^`, `*`, `?`, `$`, `#`, or `...`, then selector-specific locator text/hash/JSON. Forms: `=:<text>` / `-:<text>` for exact context/delete text, `=^<prefix>` / `-^<prefix>` for prefix context/delete text, `=*<needle>` / `-*<needle>` for contains context/delete text, `=?{...}` / `-?{...}` for combined context/delete text, `=$<suffix>` / `-$<suffix>` for suffix context/delete text, `=#<hash>` / `-#<hash>` for hash context/delete (3 or 4 base64url characters). Insert rows use `+<content>` and have no selector. Hunk headers are `@@`, `@@ @<line>`, or `@@ @<start>...<end>`; `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`. `=...` preserves a skipped context range between surrounding context operations; `-...` deletes that range. Combined selector JSON must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings, and every supplied predicate must match the same line. Do not use read-output `HASH│content` rows as patch operations. Insert operations contain literal new content directly after `+`; do not include hashes in `+` lines unless those hash characters are intended file content. Exactly one contiguous or sparse match is required. No fuzzy fallback, line-number matching, duplicate counters, or perfect hashing.
 
-Success output is compact and model-visible: file operation headers plus hash-only receipt/status. Receipt rows like `=HHHH` and `+HHHH` are status output, not patch hash locator syntax; use `=#HHH`/`=#HHHH` or `-#HHH`/`-#HHHH` in patch input. `details.diff` is a human patch transcript for host/UI, not a whole-file diff. Update entries show only the resolved input hunk lines; Delete File omits deleted file content.
+Success output is compact and model-visible: file operation headers plus status lines only. It does not include file content or post-apply hashes; use `read` with `includeHashes: true` when current hashes are needed. `details.diff` is a human patch transcript for host/UI, not a whole-file diff. Update entries show only the resolved input hunk lines; Delete File omits deleted file content.
 
 File operations apply sequentially. If a later non-dry operation fails, earlier successful operations stay applied, later operations are skipped, and the error includes a retry patch file path containing the failed operation plus skipped later operations. `dry_run: true` validates the full patch without writing.
 
 ```text
 *** Add File: new.txt
-+HHHH
+Applied
 *** Update File: existing.txt
-@@ result
-=HHHH
-+HHHH
+Applied
 *** Delete File: old.txt
 Deleted file
 ```

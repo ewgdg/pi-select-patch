@@ -19,13 +19,13 @@ import {
   writeNewTextFileAtomically,
   writeTextFileAtomically
 } from "../fs-text.js";
-import { HASH_SEPARATOR, hashLine, isHash } from "../hash.js";
+import { HASH_SEPARATOR, isHash } from "../hash.js";
 import { countRenderedLines, getVisibleOutputOverflow, type VisibleOutputOverflow } from "../output-size.js";
 import { parseText, serializeText } from "../text-lines.js";
 import { parsePatchInput, serializeUniversalPatch, type AddFileOperation, type UniversalPatchOperation } from "../universal-patch-format.js";
 import { buildPatchResultRenderText, getPatchResultText } from "./patch-render.js";
 
-interface PatchReceiptDecision {
+interface PatchStatusDecision {
   text: string;
   omitted: boolean;
   omitReason?: "empty" | "too_large";
@@ -45,7 +45,6 @@ interface PlannedFileChange {
   oldText?: string;
   newText?: string;
   applyResult?: ApplyPatchResult;
-  addedHashes?: string[];
   warnings?: string[];
 }
 
@@ -64,7 +63,7 @@ export const patchTool = defineTool({
     "Context/delete rows use `<operation><selector><locator>` syntax. The selector after the operation character must be `:`, `^`, `*`, `?`, `$`, `#`, or `...`. Raw diff rows like ` function foo()` are invalid; use exact selector row `=:function foo()`.",
     "Insert lines use raw content after `+`. Do not include hashes in `+` lines unless those hash characters are intended file content.",
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. For large patches, save output tokens by editing the retry patch file and passing it via `patch_file` instead of re-emitting large patch text.",
-    "On `patch` tool success, agent-visible output is a compact post-apply hash receipt/status for affected sections. Treat returned hashes as current for those sections."
+    "On `patch` tool success, agent-visible output is compact file status only. It does not include file content or post-apply hashes; use `read` with `includeHashes: true` when hashes are needed."
   ],
   parameters: Type.Object(
     {
@@ -234,7 +233,6 @@ async function planFileChangeForDryRun(operationTarget: OperationTarget, virtual
       patchPath: operation.path,
       targetPath,
       newText,
-      addedHashes: operation.lines.map(hashLine),
       warnings: buildInsertWarnings(operation)
     };
   }
@@ -337,10 +335,10 @@ function formatCause(cause: unknown): string {
 }
 
 function buildPatchToolResult(plannedChanges: readonly PlannedFileChange[], dryRun: boolean) {
-  const receipt = buildPatchReceiptDecision(plannedChanges, dryRun);
+  const status = buildPatchStatusDecision(plannedChanges, dryRun);
   const warnings = plannedChanges.flatMap((change) => change.warnings ?? []);
   return {
-    content: [{ type: "text" as const, text: receipt.text }],
+    content: [{ type: "text" as const, text: status.text }],
     details: {
       dryRun,
       diff: renderPatchTranscriptDiffs(plannedChanges.map(toDiffInput)),
@@ -349,19 +347,13 @@ function buildPatchToolResult(plannedChanges: readonly PlannedFileChange[], dryR
         patchPath: change.patchPath,
         operation: change.operation,
         lineCount: change.operation === "delete" ? 0 : parseText(change.newText ?? "").lines.length,
-        receipt: change.applyResult
-          ? {
-              hashLineCount: change.applyResult.receiptHashLineCount,
-              hunkReceipts: change.applyResult.hunkReceipts
-            }
-          : undefined,
         audit: change.applyResult ? { hunkAudits: change.applyResult.hunkAudits } : undefined
       })),
-      receipt: {
-        omitted: receipt.omitted,
-        omitReason: receipt.omitReason,
-        overflow: receipt.overflow,
-        visibleLineCount: receipt.visibleLineCount
+      status: {
+        omitted: status.omitted,
+        omitReason: status.omitReason,
+        overflow: status.overflow,
+        visibleLineCount: status.visibleLineCount
       },
       warnings
     }
@@ -378,7 +370,6 @@ async function planFileChange(operationTarget: OperationTarget): Promise<Planned
       patchPath: operation.path,
       targetPath,
       newText,
-      addedHashes: operation.lines.map(hashLine),
       warnings: buildInsertWarnings(operation)
     };
   }
@@ -425,25 +416,15 @@ function serializeAddFileText(operation: AddFileOperation): string {
 }
 
 
-function buildPatchReceiptDecision(plannedChanges: readonly PlannedFileChange[], dryRun: boolean): PatchReceiptDecision {
-  const renderedReceipt = renderUniversalPatchReceipt(plannedChanges);
+function buildPatchStatusDecision(plannedChanges: readonly PlannedFileChange[], dryRun: boolean): PatchStatusDecision {
+  const renderedStatus = renderUniversalPatchStatus(plannedChanges, dryRun);
   const renderedWarnings = renderPatchWarnings(plannedChanges);
-  const action = dryRun ? "Patch dry-run succeeded" : "Patch applied";
-  if (renderedReceipt.length === 0) {
-    const text = joinVisibleSections(renderedWarnings, `${action}. Receipt omitted: no visible hash receipt.`);
-    return {
-      text,
-      omitted: true,
-      omitReason: "empty",
-      visibleLineCount: countRenderedLines(text)
-    };
-  }
-
-  const visibleText = joinVisibleSections(renderedWarnings, renderedReceipt);
+  const visibleText = joinVisibleSections(renderedWarnings, renderedStatus);
   const visibleLineCount = countRenderedLines(visibleText);
   const overflow = getVisibleOutputOverflow(visibleText, visibleLineCount);
   if (overflow) {
-    const text = joinVisibleSections(renderedWarnings, `${action}. Receipt omitted: ${overflow.actual} exceeds visible cap ${overflow.max}.`);
+    const action = dryRun ? "Patch dry-run succeeded" : "Patch applied";
+    const text = joinVisibleSections(renderedWarnings, `${action}. Status omitted: ${overflow.actual} exceeds visible cap ${overflow.max}.`);
     return {
       text,
       omitted: true,
@@ -493,21 +474,13 @@ function joinVisibleSections(...sections: readonly string[]): string {
   return sections.filter((section) => section.length > 0).join("\n");
 }
 
-function renderUniversalPatchReceipt(plannedChanges: readonly PlannedFileChange[]): string {
-  return plannedChanges.map(renderFileReceipt).filter((text) => text.length > 0).join("\n");
+function renderUniversalPatchStatus(plannedChanges: readonly PlannedFileChange[], dryRun: boolean): string {
+  return plannedChanges.map((change) => renderFileStatus(change, dryRun)).join("\n");
 }
 
-function renderFileReceipt(change: PlannedFileChange): string {
-  if (change.operation === "add") {
-    return [`*** Add File: ${change.patchPath}`, ...(change.addedHashes ?? []).map((hash) => `+${hash}`)].join("\n");
-  }
-  if (change.operation === "delete") {
-    return [`*** Delete File: ${change.patchPath}`, "Deleted file"].join("\n");
-  }
-  if (!change.applyResult || change.applyResult.receiptHashLineCount === 0) {
-    return "";
-  }
-  return [`*** Update File: ${change.patchPath}`, change.applyResult.renderedReceipt].join("\n");
+function renderFileStatus(change: PlannedFileChange, dryRun: boolean): string {
+  const status = dryRun ? "Validated" : change.operation === "delete" ? "Deleted file" : "Applied";
+  return [`*** ${capitalizeOperation(change.operation)} File: ${change.patchPath}`, status].join("\n");
 }
 
 function toDiffInput(change: PlannedFileChange): PatchTranscriptDiffInput {

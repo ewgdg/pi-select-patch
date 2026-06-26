@@ -54,7 +54,7 @@ describe("tool output size guards", () => {
     expect(() => assertHashlineOutputFits("patch", rendered, rows.length)).not.toThrow(/Use read to inspect current file hashes/);
   });
 
-  it("writes huge patch result and returns compact receipt instead of full content", async () => {
+  it("writes huge patch result and returns compact status instead of full content", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
@@ -69,12 +69,12 @@ describe("tool output size guards", () => {
       { cwd: dir } as never
     );
 
-    expect(resultText(result)).toBe(["*** Update File: file.txt", "@@ result", `+${hashLine(hugeReplacement)}`].join("\n"));
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     expect(resultText(result)).not.toContain(hugeReplacement);
     await expect(readFile(file, "utf8")).resolves.toBe(hugeReplacement);
   });
 
-  it("writes patch result when receipt exceeds the line cap and returns omitted status", async () => {
+  it("writes patch result without emitting inserted rows in status", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
@@ -89,7 +89,7 @@ describe("tool output size guards", () => {
       { cwd: dir } as never
     );
 
-    expect(resultText(result)).toMatch(/Patch applied\. Receipt omitted: .*exceeds visible cap/);
+    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
     await expect(readFile(file, "utf8")).resolves.toBe(insertedRows.join("\n"));
   });
 });
