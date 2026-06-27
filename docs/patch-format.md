@@ -11,7 +11,7 @@ HASH│content
 
 Short or low-entropy lines still include the `│` marker but no visible hash: `trim().length < 8` or entropy `< 10` shows no hash, entropy `< 20` shows 3 chars, otherwise 4. `HASH` is the first 3 or 4 characters of the SHA-256 based full line hash. Line terminators are excluded. Duplicate content produces same full hash and same visible prefix.
 
-Hash mode is opt-in. Set `locatorPatch.hashMode: true` in pi `settings.json`, or use `PI_LOCATOR_PATCH_HASH_MODE=1` / `0` to force it for quick testing. In hash mode, built-in `read` is removed from active tools and patch success output uses the hash receipt described below.
+Hash mode is opt-in. Set `hashMode: true` in `~/.pi/agent/pi-locator-patch.json`, or use `PI_LOCATOR_PATCH_HASH_MODE=1` / `0` to force it for quick testing. In hash mode, built-in `read` is removed from active tools and patch success output uses the hash receipt described below.
 
 Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline convention (`LF`, `CRLF`, or `CR`) and final-newline state are preserved on update write. Empty file has zero logical lines.
 

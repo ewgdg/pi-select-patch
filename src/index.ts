@@ -10,7 +10,7 @@ export default function piLocatorPatch(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     const activeTools = pi.getActiveTools();
     const requiredLocatorTools = ["read_hash", "patch"];
-    const { hashMode } = await readLocatorPatchConfig(ctx.cwd, ctx.isProjectTrusted());
+    const { hashMode } = await readLocatorPatchConfig();
     setPatchToolHashModeGuideline(hashMode);
     const withoutConflictingTools = activeTools.filter(
       (tool) => (!hashMode || tool !== "read") && tool !== "edit" && tool !== "write" && tool !== "locator_read" && tool !== "locator_patch"

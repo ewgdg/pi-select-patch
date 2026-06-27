@@ -1,16 +1,31 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { hashLine, parseText } from "../src/api.js";
 import { patchTool } from "../src/tools/locator-patch.js";
 
 const makePlainTempDir = () => mkdtemp(join(tmpdir(), "pi-locator-patch-"));
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+const previousHashMode = process.env.PI_LOCATOR_PATCH_HASH_MODE;
+
+afterEach(() => {
+  restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
+  restoreEnv("PI_LOCATOR_PATCH_HASH_MODE", previousHashMode);
+});
+
 async function makeTempDir() {
   const dir = await makePlainTempDir();
-  await mkdir(join(dir, ".pi"));
-  await writeFile(join(dir, ".pi", "settings.json"), JSON.stringify({ locatorPatch: { hashMode: true } }));
+  const agentDir = join(dir, "agent");
+  await mkdir(agentDir);
+  await writeFile(join(agentDir, "pi-locator-patch.json"), JSON.stringify({ hashMode: true }));
+  process.env.PI_CODING_AGENT_DIR = agentDir;
   return dir;
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
 }
 const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 const hashContext = (content: string) => ` ${hashLine(content)}`;

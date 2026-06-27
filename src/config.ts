@@ -8,18 +8,16 @@ export interface LocatorPatchConfig {
 
 const ENV_HASH_MODE = "PI_LOCATOR_PATCH_HASH_MODE";
 
-export async function readLocatorPatchConfig(cwd: string, projectTrusted = true): Promise<LocatorPatchConfig> {
-  const globalSettings = await readSettingsJson(globalSettingsPath());
-  const projectSettings = projectTrusted ? await readSettingsJson(join(cwd, ".pi", "settings.json")) : {};
-  const settingsHashMode = readHashMode(projectSettings) ?? readHashMode(globalSettings) ?? false;
-  return { hashMode: readEnvHashMode() ?? settingsHashMode };
+export async function readLocatorPatchConfig(): Promise<LocatorPatchConfig> {
+  const globalConfig = await readConfigJson(globalConfigPath());
+  return { hashMode: readEnvHashMode() ?? readHashMode(globalConfig) ?? false };
 }
 
-function globalSettingsPath(): string {
-  return join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "settings.json");
+function globalConfigPath(): string {
+  return join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "pi-locator-patch.json");
 }
 
-async function readSettingsJson(path: string): Promise<unknown> {
+async function readConfigJson(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, "utf8"));
   } catch {
@@ -27,11 +25,9 @@ async function readSettingsJson(path: string): Promise<unknown> {
   }
 }
 
-function readHashMode(settings: unknown): boolean | undefined {
-  if (!isObject(settings)) return undefined;
-  const locatorPatch = settings.locatorPatch;
-  if (!isObject(locatorPatch)) return undefined;
-  return typeof locatorPatch.hashMode === "boolean" ? locatorPatch.hashMode : undefined;
+function readHashMode(config: unknown): boolean | undefined {
+  if (!isObject(config)) return undefined;
+  return typeof config.hashMode === "boolean" ? config.hashMode : undefined;
 }
 
 function readEnvHashMode(): boolean | undefined {

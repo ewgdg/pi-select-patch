@@ -615,8 +615,8 @@ function formatCause(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-async function isHashModeEnabled(ctx: { cwd: string; isProjectTrusted?: () => boolean }): Promise<boolean> {
-  return (await readLocatorPatchConfig(ctx.cwd, ctx.isProjectTrusted?.() ?? true)).hashMode;
+async function isHashModeEnabled(_ctx: { cwd: string }): Promise<boolean> {
+  return (await readLocatorPatchConfig()).hashMode;
 }
 
 function buildPatchToolResult(plannedChanges: readonly PlannedFileChange[], dryRun: boolean, hashMode: boolean) {

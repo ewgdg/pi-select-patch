@@ -12,13 +12,11 @@ On session start, the extension removes mutable built-in tools (`edit`, `write`)
 
 Hash mode makes `read_hash` the only read path and changes patch success output to a compact hash receipt.
 
-Enable in `settings.json`:
+Enable in `~/.pi/agent/pi-locator-patch.json`:
 
 ```json
 {
-  "locatorPatch": {
-    "hashMode": true
-  }
+  "hashMode": true
 }
 ```
 
