@@ -2,7 +2,7 @@
 
 ## Optional hash locators
 
-Use `read_hash` in default mode, or `read` in hash mode, to render logical text lines as:
+Use `read` in hash mode to render logical text lines as:
 
 ```text
 HASH│content
@@ -11,7 +11,7 @@ HASH│content
 
 Short or low-entropy lines still include the `│` marker but no visible hash: `trim().length < 8` or entropy `< 10` shows no hash, entropy `< 20` shows 3 chars, otherwise 4. `HASH` is the first 3 or 4 characters of the SHA-256 based full line hash. Line terminators are excluded. Duplicate content produces same full hash and same visible prefix.
 
-Hash mode is opt-in. Set `hashMode: true` in `~/.pi/agent/pi-locator-patch.json`, or use `PI_LOCATOR_PATCH_HASH_MODE=1` / `0` to force it for quick testing. In hash mode, built-in `read` is replaced by the hash-line `read`, `read_hash` is removed from active tools, and patch success output uses the hash receipt described below.
+Hash mode is opt-in. Set `hashMode: true` in `~/.pi/agent/pi-locator-patch.json`, or use `PI_LOCATOR_PATCH_HASH_MODE=1` / `0` to force it for quick testing. In hash mode, built-in `read` is replaced by the hash-line `read`, and patch success output uses the hash receipt described below. Outside hash mode, `read_hash` is hidden and built-in `read` stays active.
 
 Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline convention (`LF`, `CRLF`, or `CR`) and final-newline state are preserved on update write. Empty file has zero logical lines.
 
@@ -165,4 +165,4 @@ When patch execution fails, parser errors include an input line number. Pi TUI r
 
 ## Collision risk
 
-Visible hash locators expose 18 bits at 3 characters or 24 bits at 4 characters. Collisions are accepted behavior. Hash-only locators match by hash prefix only. Use text-only locators when exact content is needed. Use hash-line `read` in hash mode, or `read_hash` in default mode, to retrieve current target hashes after apply.
+Visible hash locators expose 18 bits at 3 characters or 24 bits at 4 characters. Collisions are accepted behavior. Hash-only locators match by hash prefix only. Use text-only locators when exact content is needed. Use hash-line `read` in hash mode, or prior hash-mode patch receipts, to retrieve current target hashes after apply.

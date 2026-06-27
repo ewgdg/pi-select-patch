@@ -83,7 +83,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   \`:<text>\` matches exact raw line text.
   \`$<suffix>\` matches by suffix string.
   \`*<text>\` matches by testing if a line contains the \`<text>\` value.
-  \`#<hash>\` matches by line hash value; use hash-line \`read\` in hash mode, or \`read_hash\` in default mode, to get current hashes.
+  \`#<hash>\` matches by line hash value; use hash-line \`read\` in hash mode, or prior patch receipts/trusted context, to get current hashes.
   \`?<json-obj>\` is a combined locator.
   \`...\` is a range locator; it has no \`<locator_value>\`.
   e.g. \` ^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.

@@ -3,7 +3,7 @@ import piLocatorPatch from "../src/index.js";
 import { patchTool } from "../src/tools/locator-patch.js";
 
 describe("extension registration", () => {
-  it("keeps read by default while hiding write/edit", async () => {
+  it("keeps built-in read by default while hiding read_hash/write/edit", async () => {
     const previous = process.env.PI_LOCATOR_PATCH_HASH_MODE;
     process.env.PI_LOCATOR_PATCH_HASH_MODE = "0";
     try {
@@ -28,12 +28,12 @@ describe("extension registration", () => {
         }
       } as never);
 
-      expect(registeredTools).toEqual(["read_hash", "patch"]);
+      expect(registeredTools).toEqual(["patch"]);
 
       await sessionStart?.({}, { cwd: process.cwd(), isProjectTrusted: () => false });
 
       expect(activeTools).toContain("read");
-      expect(activeTools).toContain("read_hash");
+      expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
       expect(patchTool.promptGuidelines?.join("\n")).not.toContain("Hash mode");
       expect(activeTools).not.toContain("write");

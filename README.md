@@ -2,11 +2,11 @@
 
 Pi extension for token-efficient file edits using explicit locator patches.
 
-The package registers `read_hash` for line reads in default mode and `patch` for multi-file add/update/delete patch application. In hash mode, the hash-line reader is exposed as `read`.
+The package registers `patch` for multi-file add/update/delete patch application. In hash mode, the hash-line reader is exposed as `read`; outside hash mode, `read_hash` stays hidden and built-in `read` stays active.
 
 Core design: keep patches short while staying exact. Use concise locators and `=...` / `-...` to skip or replace large unchanged ranges. Ambiguous or stale hunks fail instead of guessing.
 
-On session start, the extension removes mutable built-in tools (`edit`, `write`) and old locator tool names. Built-in `read` remains active unless hash mode is explicitly enabled; then hash-line `read` replaces it.
+On session start, the extension removes mutable built-in tools (`edit`, `write`), `read_hash`, and old locator tool names. Built-in `read` remains active unless hash mode is explicitly enabled; then hash-line `read` replaces it.
 
 ## Hash mode opt-in
 
@@ -88,7 +88,7 @@ Locators:
 - `?{...}` combined JSON locator with `prefix`, `contains`, and/or `suffix`.
 - `...` range between surrounding matchers: `=...` preserves, `-...` deletes.
 
-Hash prefix locator `#<hash>` is preferred in hash mode when `read` supplies a visible hash. In default mode, use `read_hash` for visible hashes. Use text locators when a line has no visible hash or when content predicates are clearer.
+Hash prefix locator `#<hash>` is preferred in hash mode when `read` supplies a visible hash. In default mode, prefer text locators; use hash locators only for hashes already known from prior receipts or other trusted context. Use text locators when a line has no visible hash or when content predicates are clearer.
 Context rows normally start with a literal space; legacy `=` context rows are accepted. Use ` :` or `=:` for exact text, including indented lines.
 
 Malformed unified-diff rows are tolerated per matcher. A context/delete row without a locator marker treats text after ` `, `=`, or `-` as exact line content. Locator matching runs once; zero matches are stale and multiple matches are ambiguous.
