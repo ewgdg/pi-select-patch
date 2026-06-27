@@ -49,17 +49,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   A hunk can contain line matchers.
   The syntax for line matcher is \`<operator><locator_marker>[<locator_value>]\`.
   Line matches in a hunk section are grouped to form a hunk match.
-  #### Locator Choice Policy
-  <important>Token efficiency is the highest priority.</important>
-  Use hash locators (\`#<hash>\`) when hash is already known for a line.
-  Otherwise use the shortest prefix or suffix or contains locator that uniquely identifies the target line in its hunk context.
-  Use line anchor to disambiguate only if the latest accurate line offset is available and earlier hunks in the same file operation will not shift it.
-  Use range locator whenever possible for range selection.
-  Use exact text locators (\`:<text>\`) only for short lines, whitespace-significant lines, or when a prefix or suffix locator would be ambiguous.
-  #### Caveats
-  Locator rows are preferred, but malformed unified-diff muscle memory is tolerated.
-  A context/delete row without a locator marker is parsed as unified diff: text after \` \`, \`=\`, or \`-\` is exact line content.
-  Only \`Update File\` section can have hunk match.
+  
   #### Match Operators
   Match operator (\`<operator>\`) can be either "-" or a literal space " ".
   It is the first char of the line matcher.
@@ -103,51 +93,61 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   Only hunk sections or \`Add File\` sections are allowed to insert lines.
   </description>
 
+  <policy>
+  <important>Token efficiency is the highest priority.</important>
+  Use hash locators (\`#<hash>\`) when a hash is already known for a line.
+  Use the shortest prefix/suffix/contains locator that uniquely identifies the target line in its hunk context.
+  Use range locator whenever possible for hunks with more than 3 lines.
+  Use line anchors to disambiguate only if the latest accurate line offset is available or add extra redundancy to the anchors.
+  Use exact text locators (\`:<text>\`) only for short lines, or when the hunk match would be ambiguous.
+  If increasing the hunk context range with shorter locators is more efficient than using exact text locators (e.g. extra long line) then you should use more hunk context as anchor.
+  If the tool returns a retry patch file containing large chunks of unapplied operations due to failures. Try fixing the retry patch file and passing it via \`patch_file\` instead of re-emitting large patch text to save tokens.
+  </policy>
+  
+  <caveats>
+  Locator rows are preferred, but malformed unified-diff muscle memory is tolerated.
+  A context/delete row without a locator marker is parsed as unified diff: text after \` \`, \`=\`, or \`-\` is exact line content.
+  Only \`Update File\` section can have hunk match.
+  </caveats>
+
   <examples>
     <example description="replace one line">
       <content>
-      \`\`\`text
       old text
-      \`\`\`
       </content>
-      <not_preferred_exact_patch>
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
+      <less_preferred_patch_snippet>
       -:old text
       +new text
-      *** End Patch
-      \`\`\`
-      </not_preferred_exact_patch>
+      </less_preferred_patch_snippet>
+      <less_preferred_patch_snippet>
+      -old text
+      +new text
+      </less_preferred_patch_snippet>
       <explanation>
-      Exact text works, but other locators can be shorter.
+      Exact text locators works, but is unnecessarily costly in this case.
+      Should use shorter locators like prefix locators.
       </explanation>
       <patch>
-      \`\`\`patch
       *** Begin Patch
       *** Update File: path/to/file.txt
       @@
       -^o
       +new text
       *** End Patch
-      \`\`\`
       </patch>
       <explanation>
       delete the line starting with "o" and insert "new text" at the same location.
+      "^o" is enough to locate the old text.
       </explanation>
     </example>
     <example description="blank line operations">
       <content>
-      \`\`\`text
       before
 
 
       after
-      \`\`\`
       </content>
       <patch description="delete one blank line and insert one at the end">
-      \`\`\`patch
       *** Begin Patch
       *** Update File: path/to/file.txt
       @@
@@ -157,131 +157,86 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
        :after
       +
       *** End Patch
-      \`\`\`
       </patch>
+      <content description="result after patch">
+      before
+
+      after
+
+      </content>
       <explanation>
       use " :" to match a blank context line, "-:" to delete a blank line, and "+" with no following text to insert a blank line.
-        <content description="result after patch">
-        \`\`\`text
-        before
-
-        after
-
-        \`\`\`
-        </content>
       </explanation>
     </example>
     <example description="range selection">
       <content>
-      \`\`\`text
       aaa
       bbb
       ccc
       ddd
-      \`\`\`
+      eee
+      fff
       </content>
-      <patch description="bulk delete all">
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
+      <bad_patch_snippet>
+      -aaa
+      -bbb
+      -ccc
+      -ddd
+      -eee
+      -fff
+      </bad_patch_snippet>
+      <explanation>
+      works but waste tokens on unnecessary locators.
+      range selection is enough to target the hunk.
+      </explanation>
+      <good_patch_snippet description="bulk delete all">
       -^a
       -...
-      -^d
-      *** End Patch
-      \`\`\`
-      </patch>
+      -^f
+      </good_patch_snippet>
       <explanation>
-      find a hunk with first line matches "aaa" and last line starts with "d".
+      find a hunk with first line starts with "a" and last line starts with "f".
       delete the first line and last line.
       delete lines in-between first and last line using range locator.
-      result is that all lines are deleted.
       </explanation>
     </example>
     <example description="disambiguate from duplicate lines">
       <content>
-      \`\`\`text
       aaa
       aaa
       ccc
       ccc
-      \`\`\`
       </content>
-      <bad_patch>
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
+      <bad_patch_snippet>
       aaa
       +bbb
-      *** End Patch
-      \`\`\`
-      </bad_patch>
+      </bad_patch_snippet>
       <explanation>
       "aaa" is invalid, it does not have an operator as the first char.
-      It should use a locator row, usually the shortest distinctive prefix such as " ^a".
       </explanation>
-      <patch>
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
+      <ok_patch_snippet>
       @@ @2
        ^a
       +bbb
-      *** End Patch
-      \`\`\`
-      </patch>
+      </ok_patch_snippet>
       <explanation>
-      use line anchor to search at or after line 2.
+      use line anchor "@2" to search at or after line 2.
       so it can locate the only match for "aaa" at line 2.
       similarly, we can use "@2...2" to pin the line range to [2,2].
       then insert a new line after.
-        <content description="result after patch">
-        \`\`\`text
-        aaa
-        aaa
-        bbb
-        ccc
-        ccc
-        \`\`\`
-        </content>
       </explanation>
-      <patch>
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
+      <caveat>
+      use line anchors with cautiousness, any previous change might have shifted the line numbers.
+      do not use stale line numbers as anchor unless add redundancy on the anchors.
+      </caveat>
+      <good_patch_snippet>
        ^a
       +bbb
        ^c
-      *** End Patch
-      \`\`\`
-      </patch>
+      </good_patch_snippet>
       <explanation>
       find a hunk with adjacent "aaa" and "ccc" lines.
       insert a new line "bbb" in-between.
-      </explanation>
-    </example>
-    <example description="use combined locator">
-      <content>
-      \`\`\`text
-      abcd
-      cbdd
-      acbb
-      \`\`\`
-      </content>
-      <patch description="delete the line 'abcd'">
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
-      -?{"prefix":"a","suffix":"d"}
-      *** End Patch
-      \`\`\`
-      </patch>
-      <explanation>
-      the locator targets line starts with "a" and ends with "d".
-      the only match is "abcd".
       </explanation>
     </example>
   </examples>
@@ -318,7 +273,7 @@ export const patchTool = defineTool({
   name: "patch",
   label: "Locator Patch",
   description: "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
-  promptSnippet: "Prefer for normal token-efficient file edits; supports multi-file changes in one patch call.",
+  promptSnippet: "Use this tool for patching.",
   promptGuidelines: buildPatchPromptGuidelines(false),
   parameters: Type.Object(
     {
@@ -415,7 +370,6 @@ export function setPatchToolHashModeGuideline(hashMode: boolean): void {
 function buildPatchPromptGuidelines(hashMode: boolean): string[] {
   const guidelines = [
     "Prefer `patch` tool over other text-replacement-based editing.",
-    "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. Try fixing the retry patch file first and passing it via `patch_file` instead of re-emitting large patch text to save tokens."
   ];
   if (hashMode) {
     guidelines.push("Hash mode active: use `read` for hash-line text reads; `patch` success returns a compact hash-only receipt with context hashes, inserted-line hashes. Treat patch receipt as current state for touched hunks. Reuse known hashes prior `read` and prior patch receipts to avoid unnecessary read.");

@@ -78,8 +78,8 @@ describe("patch visible status", () => {
 
     expect(description).toContain("<description>\nInline patch text.");
     expect(description).not.toContain("<description>\n  Inline patch text.");
-    expect(description).toMatch(/^ {4}<content>\n {4}```text\n {4}old text\n {4}```\n {4}<\/content>/m);
-    expect(description).not.toMatch(/^ {4}<content>\n {6}```text/m);
+    expect(description).toMatch(/^ {4}<content>\n {4}old text\n {4}<\/content>/m);
+    expect(description).not.toMatch(/^ {4}<content>\n {6}old text/m);
     expect(description).toMatch(/^ {4}@@\n {5}:before\n {5}:\n {4}-:\n {5}:after\n {4}\+\n {4}\*\*\* End Patch/m);
   });
 
