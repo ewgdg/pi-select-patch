@@ -312,7 +312,7 @@ export const patchTool = defineTool({
   description: "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
   promptSnippet: "Prefer for normal token-efficient file edits; supports multi-file changes in one patch call.",
   promptGuidelines: [
-    "Prefer `patch` tool over other simple text replacement editing.",
+    "Prefer `patch` tool over other text-replacement-based editing.",
     "Prefer token-efficient locators (e.g. prefix locators over exact text locators) if possible for the `patch` tool.",
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. For large patches, save output tokens by editing the retry patch file and passing it via `patch_file` instead of re-emitting large patch text.",
     "On `patch` tool success, agent-visible output is compact file status only."
