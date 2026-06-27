@@ -93,28 +93,40 @@ Rules:
 - Zero matches = stale hunk. More than one match = ambiguous hunk.
 - Pure insertion has empty match sequence and is supported only when target file has zero logical lines; hunk anchor hints are rejected on pure insert hunks because there is no resolved match start.
 
-### Delete a blank line
+### Blank line operations
 
-Use `-:` to delete one blank line. `:` is the exact-text locator; with no text after it, it matches an empty logical line.
+`:` is the exact-text locator; with no text after it, it matches an empty logical line.
 
-Input:
+This patch deletes one of two blank lines and inserts one blank line at the end of the matched span:
 
 ```text
 before
 
+
 after
 ```
-
-Patch:
 
 ```diff
 *** Begin Patch
 *** Update File: existing.txt
 @@
 =:before
+=:
 -:
 =:after
++
 *** End Patch
+```
+
+Use `=:` to match a blank context line, `-:` to delete a blank line, and `+` with no following text to insert a blank line.
+
+Result has one blank line between `before` and `after`, plus one blank line after `after`:
+
+```text
+before
+
+after
+
 ```
 
 ## Delete File

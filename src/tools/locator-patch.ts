@@ -119,27 +119,38 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         delete the line matching exact text "old text" and insert "new text" at the same location.
       </explanation>
     </example>
-    <example description="delete a blank line">
+    <example description="blank line operations">
       <content>
         \`\`\`text
         before
 
+
         after
         \`\`\`
       </content>
-      <patch>
+      <patch description="delete one blank line and insert one at the end">
         \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
         =:before
+        =:
         -:
         =:after
+        +
         *** End Patch
         \`\`\`
       </patch>
       <explanation>
-        use "-:" to delete a single blank line because ":" is the exact-text locator with empty text.
+        use "=:" to match a blank context line, "-:" to delete a blank line, and "+" with no following text to insert a blank line.
+        <content description="result after patch">
+        \`\`\`text
+        before
+
+        after
+
+        \`\`\`
+        </content>
       </explanation>
     </example>
     <example description="range selection">
