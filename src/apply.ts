@@ -338,10 +338,10 @@ function renderMatchLocator(op: MatchPatchOp): string {
 function validateSparseRanges(hunk: Hunk, hunkIndex: number): void {
   for (const [opIndex, op] of hunk.ops.entries()) {
     if (op.kind !== "range") continue;
-    const previousMatchOp = findNearestMatchOp(hunk.ops, opIndex, -1);
-    const nextMatchOp = findNearestMatchOp(hunk.ops, opIndex, 1);
-    if (previousMatchOp?.kind !== "context" || nextMatchOp?.kind !== "context") {
-      throw new UnsupportedHunkError(`Hunk ${hunkIndex} '${renderRangeLocator(op.rangeKind)}' must be between context operations.`);
+    const previousAnchorOp = findNearestMatchOp(hunk.ops, opIndex, -1);
+    const nextAnchorOp = findNearestMatchOp(hunk.ops, opIndex, 1);
+    if (!previousAnchorOp || !nextAnchorOp) {
+      throw new UnsupportedHunkError(`Hunk ${hunkIndex} '${renderRangeLocator(op.rangeKind)}' must be between context/deletion operations.`);
     }
   }
 }

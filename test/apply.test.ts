@@ -241,6 +241,15 @@ describe("applyPatchToText", () => {
     expect(result.renderedReceipt).toBe(["@@ result", `=${hashLine("start")}`, `+${hashLine("new")}`, `=${hashLine("end")}`].join("\n"));
   });
 
+  it("uses context and delete operations as unified sparse range anchors", () => {
+    const deleteAnchorsResult = applyPatchToText("first\nmiddle\nlast", patch(row("-", "first"), "-...", row("-", "last")));
+    expect(deleteAnchorsResult.text).toBe("");
+    expect(deleteAnchorsResult.hunkAudits[0].deletedHashes).toEqual([hashLine("first"), hashLine("middle"), hashLine("last")]);
+
+    const mixedAnchorsResult = applyPatchToText("first\nmiddle\nlast", patch(row("-", "first"), "=...", row("=", "last")));
+    expect(mixedAnchorsResult.text).toBe("middle\nlast");
+  });
+
   it("applies multiple hunks sequentially", () => {
     const text = "a\nb\nc";
     const multi = [

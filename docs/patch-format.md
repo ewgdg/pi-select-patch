@@ -89,8 +89,8 @@ Rules:
   Context rows start with a literal space, matching unified-diff muscle memory. Use ` :` for exact text, including indented lines. Legacy `=` context rows are accepted by the parser for compatibility but are not emitted. A context/delete row without a locator marker is parsed as unified diff: text after ` `, `=`, or `-` is exact line content. A blank hunk row means an empty context line.
 - Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
 - Do not use hash-line read output rows (`HASH│content`) as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
-- ` ...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
-- `-...` deletes every target line between the nearest surrounding context operations. Add `+` lines after it to replace that range.
+- ` ...` preserves every target line between the nearest surrounding context/delete operations while avoiding long context in the patch.
+- `-...` deletes every target line between the nearest surrounding context/delete operations. Add `+` lines after it to replace that range. Surrounding delete operations also anchor the sparse range, then delete their matched endpoint lines.
 - Hunks without ellipsis must match exactly one contiguous span in current target file. Hunks with ellipsis must match exactly one sparse span.
 - Pure insertion has empty match sequence and is supported only when target file has zero logical lines; hunk anchor hints are rejected on pure insert hunks because there is no resolved match start.
 

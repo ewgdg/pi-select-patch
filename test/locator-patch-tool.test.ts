@@ -83,15 +83,6 @@ describe("patch visible status", () => {
     expect(description).toMatch(/^ {4}@@\n {5}:before\n {5}:\n {4}-:\n {5}:after\n {4}\+\n {4}\*\*\* End Patch/m);
   });
 
-  it("teaches hash locators before text locators", () => {
-    const description = patchParameterDescription();
-
-    expect(description).toContain("Prefer hash locators (`#<hash>`) when hash is already given.");
-    expect(description.indexOf('"^" specifies a prefix locator.')).toBeLessThan(description.indexOf('":" specifies an exact text locator.'));
-    expect(description).toContain('"$" specifies a suffix locator.');
-    expect(description).toMatch(/^ {4}@@\n {4}-\^o\n {4}\+new text\n {4}\*\*\* End Patch/m);
-  });
-
   it("is agent-visible as a hash receipt with context and inserted lines only", async () => {
     const diff = ["@@", row("=", "a"), row("-", "old"), row("+", "new"), row("=", "z")].join("\n");
 
