@@ -1,4 +1,5 @@
-import { defineTool } from "@earendil-works/pi-coding-agent";
+import { createReadToolDefinition, defineTool, type Theme } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { readExistingTextFile, resolveToolPath } from "../fs-text.js";
 import { assertHashlineOutputFits, LLM_VISIBLE_OUTPUT_MAX_LINES } from "../output-size.js";
@@ -6,6 +7,19 @@ import { renderHashLines, toHashLines } from "../read-format.js";
 import { parseText } from "../text-lines.js";
 
 const MAX_LIMIT = LLM_VISIBLE_OUTPUT_MAX_LINES;
+const renderBuiltInReadResult = createReadToolDefinition(process.cwd()).renderResult;
+
+type ReadHashRenderArgs = { path?: string; offset?: number; limit?: number };
+
+function formatReadHashCall(args: ReadHashRenderArgs, theme: Pick<Theme, "fg" | "bold">): string {
+  const startLine = args.offset ?? 1;
+  const endLine = args.limit !== undefined ? startLine + args.limit - 1 : undefined;
+  const range =
+    args.offset !== undefined || args.limit !== undefined
+      ? theme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`)
+      : "";
+  return `${theme.fg("toolTitle", theme.bold("read_hash"))} ${theme.fg("accent", args.path ?? "")}${range}`;
+}
 
 export const readHashTool = defineTool({
   name: "read_hash",
@@ -43,5 +57,15 @@ export const readHashTool = defineTool({
         hasMore: offset - 1 + limit < model.lines.length
       }
     };
+  },
+  renderCall(args, theme, context) {
+    const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+    text.setText(formatReadHashCall(args, theme));
+    return text;
+  },
+  // Reuse built-in read result rendering so read_hash collapses, expands,
+  // highlights, and truncation-displays like normal file reads in the TUI.
+  renderResult(result, options, theme, context) {
+    return renderBuiltInReadResult?.(result as never, options, theme, context as never) ?? new Text("", 0, 0);
   }
 });

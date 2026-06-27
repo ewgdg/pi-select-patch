@@ -15,6 +15,13 @@ const firstText = (result: Awaited<ReturnType<typeof readHashTool.execute>>) => 
   return content.text;
 };
 
+const renderText = (component: { render: (width: number) => string[] }) => component.render(200).join("\n").trimEnd();
+
+const theme = {
+  fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
+  bold: (text: string) => `<b>${text}</b>`
+};
+
 describe("read_hash tool", () => {
   it("is agent-visible as read_hash and returns variable HASH│content rows", async () => {
     const dir = await makeTempDir();
@@ -29,5 +36,33 @@ describe("read_hash tool", () => {
       `${hashLine("const enabled = true;").slice(0, 3)}│const enabled = true;`,
       `${hashLine("function parsePatchOp(line: string): PatchOp {")}│function parsePatchOp(line: string): PatchOp {`
     ].join("\n"));
+  });
+
+  it("uses the built-in read result renderer while keeping a read_hash call label", async () => {
+    const dir = await makeTempDir();
+    await writeFile(join(dir, "file"), "short\nconst enabled = true;\n");
+    const args = { path: "file" };
+    const result = await readHashTool.execute("tool-call", args, undefined, undefined, { cwd: dir } as never);
+    const context = {
+      args,
+      cwd: dir,
+      lastComponent: undefined,
+      showImages: false,
+      isError: false
+    } as never;
+
+    const callText = renderText(readHashTool.renderCall?.(args, theme as never, context) as never);
+    const collapsedResult = renderText(
+      readHashTool.renderResult?.(result, { expanded: false, isPartial: false }, theme as never, context) as never
+    );
+    const expandedResult = renderText(
+      readHashTool.renderResult?.(result, { expanded: true, isPartial: false }, theme as never, context) as never
+    );
+
+    expect(callText).toContain("read_hash");
+    expect(callText).not.toContain("<b>read</b>");
+    expect(collapsedResult).toBe("");
+    expect(expandedResult).toContain("│short");
+    expect(expandedResult).toContain(`${hashLine("const enabled = true;").slice(0, 3)}│const enabled = true;`);
   });
 });
