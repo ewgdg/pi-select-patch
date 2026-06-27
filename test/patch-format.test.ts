@@ -153,14 +153,17 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects raw delete, hash locator, and unsupported operations", () => {
+  it("parses unified-diff rows when locator markers are missing", () => {
     const hash = hashLine("ctx");
+    const parsed = parsePatch(["@@", ` ${hash}`, `-${hash}`, "+new", " context", "-"].join("\n"));
 
-    expect(() => parsePatch(["@@", `-${hash}`].join("\n"))).toThrow("Rows use <operator><locator>");
-    expect(() => parsePatch(["@@", "=bare text"].join("\n"))).toThrow("use exact locator ' :bare text'");
-    expect(() => parsePatch(["@@", "-bare text"].join("\n"))).toThrow("use exact locator '-:bare text'");
-    expect(() => parsePatch(["@@", `=${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
-    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: hash, textSelector: "exact" },
+      { kind: "delete", content: hash, textSelector: "exact" },
+      { kind: "insert", content: "new" },
+      { kind: "context", content: "context", textSelector: "exact" },
+      { kind: "delete", content: "", textSelector: "exact" }
+    ]);
     expect(() => parsePatch(["@@", `~${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });
 

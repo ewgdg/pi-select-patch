@@ -49,8 +49,9 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     The syntax for line matcher is \`<operator><locator_marker>[<locator_value>]\`.
     Line matches in a hunk section are grouped to form a hunk match.
     #### Caveats
-    This format is not plain unified diff: context and delete rows still require a locator marker after the operator.
-    Legacy forms like \`-<text>\` are not supported; use a locator marker, e.g. \`-:<text>\`.
+    Locator rows are preferred, but malformed unified-diff muscle memory is tolerated.
+    A context/delete row without a locator marker is parsed as unified diff: text after \` \`, \`=\`, or \`-\` is exact line content.
+    If matching finds zero spans, the hunk retries once with every context/delete row treated as unified-diff exact text.
     Only \`Update File\` section can have hunk match.
     #### Match Operators
     Match operator (\`<operator>\`) can be either "-" or a literal space " ".
@@ -89,7 +90,8 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     The JSON object must contain at least one key.
     e.g. \`{"prefix":"a","contains":["b","c"],"suffix":"d"}\`
     ### Insertion
-    Patch uses "+" operator to insert lines.
+    Patch uses a leading "+" operator to insert lines.
+    The "+" char needs to be the first char of the line.
     The syntax is \`+<text>\`, where \`<text>\` is a raw string for a line content.
     Only hunk sections or \`Add File\` sections are allowed to insert lines.
   </description>
@@ -102,7 +104,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         old text
         \`\`\`
       </content>
-      <bad_patch>
+      <valid_but_not_preferred_patch>
         \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
@@ -111,9 +113,9 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         +new text
         *** End Patch
         \`\`\`
-      </bad_patch>
+      </valid_but_not_preferred_patch>
       <explanation>
-        "-old text" is not a valid delete locator, a valid one has a type marker following the operator "-".
+        "-old text" works through unified-diff exact mode. Prefer "-:old text" when intentionally writing locator patches.
       </explanation>
       <patch>
         \`\`\`patch

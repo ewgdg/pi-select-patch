@@ -33,10 +33,13 @@ export interface PatchHunkTranscript {
   lines: PatchTranscriptLine[];
 }
 
+export type PatchMatcherKind = "exact" | "prefix" | "contains" | "suffix" | "hash" | "combined" | "range" | "unifiedDiff";
+
 export interface PatchHunkAudit {
   hunkIndex: number;
   matchStart: number | null;
   matchPattern: string[];
+  matcherKinds: PatchMatcherKind[];
   survivingContextHashes: string[];
   insertedHashes: string[];
   deletedHashes: string[];
@@ -110,6 +113,18 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
 }
 
 function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
+  try {
+    return applyHunkStrict(lines, hunk, hunkIndex, hashFn);
+  } catch (error) {
+    if (!(error instanceof StaleHunkError) || hunk.unifiedFallbackOps === undefined) {
+      throw error;
+    }
+
+    return applyHunkStrict(lines, { ...hunk, ops: hunk.unifiedFallbackOps, unifiedFallbackOps: undefined }, hunkIndex, hashFn);
+  }
+}
+
+function applyHunkStrict(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
   validateNoConflictingLocators(hunk, hunkIndex);
   const matchPattern = buildMatchPattern(hunk);
@@ -135,6 +150,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
           hunkIndex,
           matchStart: null,
           matchPattern: [],
+          matcherKinds: [],
           survivingContextHashes: [],
           insertedHashes,
           deletedHashes: []
@@ -224,6 +240,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
       hunkIndex,
       matchStart: match.start,
       matchPattern,
+      matcherKinds: buildMatcherKinds(hunk),
       survivingContextHashes,
       insertedHashes,
       deletedHashes
@@ -296,6 +313,20 @@ function buildMatchPattern(hunk: Hunk): string[] {
     if (op.kind === "insert") return [];
     if (op.kind === "range") return [renderRangeLocator(op.rangeKind)];
     return [renderMatchLocator(op)];
+  });
+}
+
+function buildMatcherKinds(hunk: Hunk): PatchMatcherKind[] {
+  return hunk.ops.flatMap((op) => {
+    if (op.kind === "insert") return [];
+    if (op.kind === "range") return ["range"];
+    if (op.unifiedDiff === true) return ["unifiedDiff"];
+    if (op.hash !== undefined) return ["hash"];
+    if (op.combinedSelector !== undefined) return ["combined"];
+    if (op.textSelector === "prefix") return ["prefix"];
+    if (op.textSelector === "contains") return ["contains"];
+    if (op.textSelector === "suffix") return ["suffix"];
+    return ["exact"];
   });
 }
 

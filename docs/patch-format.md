@@ -84,13 +84,13 @@ Rules:
 - Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
 - Context/delete rows use `<operator><locator>` syntax: `<operator>` is a space for context or `-` for delete; `<locator>` is `:`, `^`, `*`, `?`, `$`, `#`, or `...` plus selector-specific text, hash, or JSON. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` #<hash>` / `-#<hash>` = hash context/delete (3 or 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector.
-  Context rows start with a literal space, matching unified-diff muscle memory. Use ` :` for exact text, including indented lines. Legacy `=` context rows are accepted by the parser for compatibility but are not emitted.
+  Context rows start with a literal space, matching unified-diff muscle memory. Use ` :` for exact text, including indented lines. Legacy `=` context rows are accepted by the parser for compatibility but are not emitted. A context/delete row without a locator marker is parsed as unified diff: text after ` `, `=`, or `-` is exact line content.
 - Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
 - Do not use `read_hash` output rows (`HASH│content`) as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
 - ` ...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context operations. Add `+` lines after it to replace that range.
 - Hunks without ellipsis must match exactly one contiguous span in current target file. Hunks with ellipsis must match exactly one sparse span.
-- Zero matches = stale hunk. More than one match = ambiguous hunk.
+- Zero matches trigger one unified-diff exact retry using the raw text after each context/delete operator. If the retry also has zero matches, the hunk is stale. More than one match = ambiguous hunk.
 - Pure insertion has empty match sequence and is supported only when target file has zero logical lines; hunk anchor hints are rejected on pure insert hunks because there is no resolved match start.
 
 ### Blank line operations

@@ -56,7 +56,7 @@ Hunk headers:
 
 Rows inside update hunks:
 
-- `=<locator>` — context line; used only for matching/anchoring.
+- ` <locator>` / `=<locator>` — context line; used only for matching/anchoring.
 - `-<locator>` — delete matched line.
 - `+<content>` — insert literal line content.
 
@@ -70,9 +70,9 @@ Locators:
 - `...` range between surrounding matchers: `=...` preserves, `-...` deletes.
 
 Hash prefix locator `#<hash>` also exists for rare fallback cases. Prefer text locators because they are readable and avoid hash collision ambiguity.
-Context rows must start with `=`. Leading-space context rows are invalid; use `=:` for exact text, including indented lines.
+Context rows normally start with a literal space; legacy `=` context rows are accepted. Use ` :` or `=:` for exact text, including indented lines.
 
-A hunk must resolve to exactly one contiguous span, or exactly one sparse span when `...` is used. Zero matches fail as stale. Multiple matches fail as ambiguous. There is no fuzzy fallback.
+Malformed unified-diff rows are tolerated per matcher. A context/delete row without a locator marker treats text after ` `, `=`, or `-` as exact line content. If locator matching finds zero spans, the hunk retries once with every context/delete row treated as unified-diff exact text. Multiple matches still fail as ambiguous.
 
 ### Output and failure behavior
 

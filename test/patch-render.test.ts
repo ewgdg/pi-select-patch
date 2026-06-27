@@ -100,8 +100,35 @@ describe("patch renderer helpers", () => {
       hash: 1,
       combined: 1,
       range: 2,
+      unifiedDiff: 0,
       total: 9
     });
+  });
+
+  it("counts and renders unified-diff matchers separately", () => {
+    const details = {
+      files: [
+        {
+          audit: {
+            hunkAudits: [
+              { matcherKinds: ["unifiedDiff", "unifiedDiff"], matchPattern: [" :^literal", "-:#abc"] },
+              { matcherKinds: ["prefix"], matchPattern: [" ^prefix"] }
+            ]
+          }
+        }
+      ]
+    };
+
+    expect(getPatchMatcherStats(details)).toMatchObject({ exact: 0, prefix: 1, unifiedDiff: 2, total: 3 });
+
+    const rendered = buildPatchResultRenderText({
+      details: { ...details, diff: "--- a/file\n+++ b/file\n-old\n+new" },
+      expanded: false,
+      isPartial: false,
+      isError: false,
+      theme
+    });
+    expect(rendered).toContain("<muted>Matchers: prefix 1 / unified-diff 2</muted>");
   });
 
   it("renders collapsed diff with compact limit, color, omission count, and Ctrl+O hint", () => {

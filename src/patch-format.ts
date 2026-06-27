@@ -21,6 +21,7 @@ export interface MatchPatchOp {
   content?: string;
   textSelector?: TextSelectorKind;
   combinedSelector?: CombinedTextSelector;
+  unifiedDiff?: boolean;
 }
 
 export interface InsertPatchOp {
@@ -42,6 +43,7 @@ export interface HunkAnchorHint {
 export interface Hunk {
   anchorHint?: HunkAnchorHint;
   ops: PatchOp[];
+  unifiedFallbackOps?: PatchOp[];
 }
 
 export interface Patch {
@@ -70,7 +72,7 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine, l
     const anchorHint = parseHunkHeader(line, hunkHeaderLine);
     index += 1;
 
-    const ops: PatchOp[] = [];
+    const opLines: PatchOperationLine[] = [];
     while (index < lines.length && !isHunkHeaderLine(lines[index])) {
       const opLine = lines[index];
       const operationLine = patchInputLine(index, lineOffset);
@@ -80,14 +82,16 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine, l
       if (opLine.startsWith("@@")) {
         parseHunkHeader(opLine, operationLine);
       }
-      ops.push(parsePatchOp(opLine, hashFn, operationLine));
+      opLines.push({ line: opLine, inputLine: operationLine });
       index += 1;
     }
 
+    const parsedHunk = parseHunkOperationLines(opLines, hashFn);
+    const ops = parsedHunk.ops;
     if (ops.length === 0) {
       throw new InvalidPatchError("Hunk must contain at least one operation.", { inputLine: hunkHeaderLine });
     }
-    hunks.push(anchorHint ? { anchorHint, ops } : { ops });
+    hunks.push({ ...(anchorHint ? { anchorHint } : {}), ops, ...(parsedHunk.unifiedFallbackOps ? { unifiedFallbackOps: parsedHunk.unifiedFallbackOps } : {}) });
   }
 
   if (hunks.length === 0) {
@@ -95,6 +99,21 @@ export function parsePatch(patchText: string, hashFn: HashFunction = hashLine, l
   }
 
   return { hunks };
+}
+
+
+interface PatchOperationLine {
+  line: string;
+  inputLine: number;
+}
+
+function parseHunkOperationLines(opLines: readonly PatchOperationLine[], hashFn: HashFunction): Pick<Hunk, "ops" | "unifiedFallbackOps"> {
+  return {
+    ops: opLines.map((opLine) => hasMissingLocatorMarker(opLine.line)
+      ? parseUnifiedDiffOp(opLine.line, hashFn, opLine.inputLine)
+      : parsePatchOp(opLine.line, hashFn, opLine.inputLine)),
+    unifiedFallbackOps: opLines.map((opLine) => parseUnifiedDiffOp(opLine.line, hashFn, opLine.inputLine))
+  };
 }
 
 const HUNK_HEADER_PATTERN = /^@@(?: @([1-9]\d*)(?:\.\.\.([1-9]\d*))?)?$/;
@@ -125,6 +144,34 @@ function parseHunkHeader(line: string, inputLine: number): HunkAnchorHint | unde
     throw new InvalidPatchError(`Malformed hunk anchor hint '${line}'. Start line must be less than or equal to end line.`, { inputLine });
   }
   return endLine === undefined ? { line: hintLine } : { line: hintLine, endLine };
+}
+
+function hasMissingLocatorMarker(line: string): boolean {
+  if (line.startsWith("+")) return false;
+  if (!(line.startsWith("=") || line.startsWith(" ") || line.startsWith("-"))) return false;
+
+  const selector = line.slice(1);
+  if (selector === "") return line.startsWith("-");
+  return !hasLocatorMarker(selector);
+}
+
+function hasLocatorMarker(selector: string): boolean {
+  return selector === "..." || selector.startsWith(":") || selector.startsWith("#") || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$");
+}
+
+function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
+  if (line.startsWith("+")) {
+    const content = line.slice(1);
+    return { kind: "insert", hash: hashFn(content), content };
+  }
+  if (line.startsWith("=") || line.startsWith(" ")) {
+    return { kind: "context", content: line.slice(1), textSelector: "exact", unifiedDiff: true };
+  }
+  if (line.startsWith("-")) {
+    return { kind: "delete", content: line.slice(1), textSelector: "exact", unifiedDiff: true };
+  }
+
+  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use ' <context>', '-<old>', '+<new>', or locator operations.`, { inputLine });
 }
 
 function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {

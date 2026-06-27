@@ -114,6 +114,22 @@ describe("applyPatchToText", () => {
     expect(result.text).toBe("a\nnew\nz");
   });
 
+  it("applies unified-diff rows when locator markers are missing", () => {
+    const result = applyPatchToText("a\nold\nz", patch(" a", "-old", "+new", " z"));
+
+    expect(result.text).toBe("a\nnew\nz");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["unifiedDiff", "unifiedDiff", "unifiedDiff"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" :a", "-:old", " :z"]);
+  });
+
+  it("falls back to unified exact matching when locator matching finds no span", () => {
+    const result = applyPatchToText("^literal\n#abc", patch(" ^literal", "-#abc", "+done"));
+
+    expect(result.text).toBe("^literal\ndone");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["unifiedDiff", "unifiedDiff"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" :^literal", "-:#abc"]);
+  });
+
   it("uses hunk anchor hints as lower-bound search starts for contiguous matches", () => {
     const result = applyPatchToText("target\nx\ntarget", anchoredPatch(3, "-:target"));
 

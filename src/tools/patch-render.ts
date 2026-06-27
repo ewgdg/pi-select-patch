@@ -25,6 +25,7 @@ export interface PatchMatcherStats {
   hash: number;
   combined: number;
   range: number;
+  unifiedDiff: number;
   total: number;
 }
 
@@ -71,7 +72,18 @@ export function getPatchMatcherStats(details: unknown): PatchMatcherStats {
       continue;
     }
     for (const hunkAudit of file.audit.hunkAudits) {
-      if (!isRecord(hunkAudit) || !Array.isArray(hunkAudit.matchPattern)) {
+      if (!isRecord(hunkAudit)) {
+        continue;
+      }
+      if (Array.isArray(hunkAudit.matcherKinds)) {
+        for (const matcherKind of hunkAudit.matcherKinds) {
+          if (typeof matcherKind === "string") {
+            incrementPatchMatcherKind(stats, matcherKind);
+          }
+        }
+        continue;
+      }
+      if (!Array.isArray(hunkAudit.matchPattern)) {
         continue;
       }
       for (const matchPattern of hunkAudit.matchPattern) {
@@ -217,7 +229,20 @@ export function buildPatchResultRenderText(options: {
 }
 
 function createEmptyPatchMatcherStats(): PatchMatcherStats {
-  return { exact: 0, prefix: 0, contains: 0, suffix: 0, hash: 0, combined: 0, range: 0, total: 0 };
+  return { exact: 0, prefix: 0, contains: 0, suffix: 0, hash: 0, combined: 0, range: 0, unifiedDiff: 0, total: 0 };
+}
+
+function incrementPatchMatcherKind(stats: PatchMatcherStats, matcherKind: string): void {
+  if (matcherKind === "exact") stats.exact += 1;
+  else if (matcherKind === "prefix") stats.prefix += 1;
+  else if (matcherKind === "contains") stats.contains += 1;
+  else if (matcherKind === "suffix") stats.suffix += 1;
+  else if (matcherKind === "hash") stats.hash += 1;
+  else if (matcherKind === "combined") stats.combined += 1;
+  else if (matcherKind === "range") stats.range += 1;
+  else if (matcherKind === "unifiedDiff") stats.unifiedDiff += 1;
+  else return;
+  stats.total += 1;
 }
 
 function incrementPatchMatcherStats(stats: PatchMatcherStats, matchPattern: string): void {
@@ -254,7 +279,8 @@ function formatPatchMatcherStatsFooter(stats: PatchMatcherStats, theme: PatchRen
     ["suffix", stats.suffix],
     ["hash", stats.hash],
     ["combined", stats.combined],
-    ["range", stats.range]
+    ["range", stats.range],
+    ["unified-diff", stats.unifiedDiff]
   ];
   const parts = entries
     .filter(([, count]) => count > 0)
