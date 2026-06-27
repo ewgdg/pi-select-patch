@@ -139,10 +139,29 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects legacy bare text and hash locator operations", () => {
+  it("parses leading-space context rows as exact text locators", () => {
+    const parsed = parsePatch(["@@", " literal context", " "].join("\n"));
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "literal context", textSelector: "exact" },
+      { kind: "context", content: "", textSelector: "exact" }
+    ]);
+  });
+
+  it("parses space-prefixed selector-looking rows as literal exact context", () => {
+    const parsed = parsePatch(["@@", " ^foo", " #abc", " ...", " :x"].join("\n"));
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "^foo", textSelector: "exact" },
+      { kind: "context", content: "#abc", textSelector: "exact" },
+      { kind: "context", content: "...", textSelector: "exact" },
+      { kind: "context", content: ":x", textSelector: "exact" }
+    ]);
+  });
+
+  it("rejects raw delete, hash locator, and unsupported operations", () => {
     const hash = hashLine("ctx");
 
-    expect(() => parsePatch(["@@", ` ${hash}`].join("\n"))).toThrow("Space context operation is no longer supported");
     expect(() => parsePatch(["@@", `-${hash}`].join("\n"))).toThrow("Raw delete row detected");
     expect(() => parsePatch(["@@", "=bare text"].join("\n"))).toThrow("use exact selector '=:bare text'");
     expect(() => parsePatch(["@@", "-bare text"].join("\n"))).toThrow("use exact selector '-:bare text'");

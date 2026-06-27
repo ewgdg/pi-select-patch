@@ -134,7 +134,7 @@ function parsePatchOp(line: string, hashFn: HashFunction): PatchOp {
     return parseSelectorPatchOp("context", line.slice(1), line);
   }
   if (line.startsWith(" ")) {
-    throwLegacySpaceContextOperationError(line);
+    return { kind: "context", content: line.slice(1), textSelector: "exact" };
   }
   if (line.startsWith("-")) {
     return parseSelectorPatchOp("delete", line.slice(1), line);
@@ -170,11 +170,6 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
 }
 
 
-function throwLegacySpaceContextOperationError(line: string): never {
-  const selector = line.slice(1);
-  const suggestedContextSelector = selector.startsWith(":") || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$") || selector.startsWith("#") || selector === "..." ? `=${selector}` : `=:${selector}`;
-  throw new InvalidPatchError(`Space context operation is no longer supported: '${line}'. Use '=' context operation '${suggestedContextSelector}'.`);
-}
 
 function throwRawTextSelectorError(kind: MatchPatchOpKind, selector: string, line: string): never {
   const suggestedExactSelector = kind === "context" ? `=:${selector}` : `-:${selector}`;

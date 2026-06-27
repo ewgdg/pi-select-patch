@@ -71,6 +71,26 @@ describe("universal patch parser", () => {
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
+  it("serializes leading-space context sugar with canonical exact selector syntax", () => {
+    const source = [
+      "*** Begin Patch",
+      "*** Update File: existing.txt",
+      "@@",
+      " literal context",
+      " ...",
+      "*** End Patch"
+    ].join("\n");
+
+    expect(serializeUniversalPatch(parseUniversalPatch(source).operations)).toBe([
+      "*** Begin Patch",
+      "*** Update File: existing.txt",
+      "@@",
+      "=:literal context",
+      "=:...",
+      "*** End Patch"
+    ].join("\n"));
+  });
+
   it("round-trips exact, prefix, contains, combined, and suffix text selectors with marker characters", () => {
     const serialized = serializeUniversalPatch([
       {
