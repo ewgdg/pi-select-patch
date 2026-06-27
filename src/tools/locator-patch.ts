@@ -104,28 +104,35 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   </description>
 
   <examples>
+    Fenced blocks show exact patch columns. Column 1 starts after the fence indentation, so examples can stay indented without hiding patch whitespace.
     <example description="replace one line">
       <content>
+        \`\`\`text
         old text
+        \`\`\`
       </content>
       <bad_patch>
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
         -old text
         +new text
         *** End Patch
+        \`\`\`
       </bad_patch>
       <explanation>
         "-old text" is not a valid delete locator, a valid one has a type marker following the operator "-".
       </explanation>
       <patch>
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
         -:old text
         +new text
         *** End Patch
+        \`\`\`
       </patch>
       <explanation>
         delete the line matching exact text "old text" and insert "new text" at the same location.
@@ -133,12 +140,15 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     </example>
     <example description="range selection">
       <content>
+        \`\`\`text
         aaa
         bbb
         ccc
         ddd
+        \`\`\`
       </content>
       <patch description="bulk delete all">
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
@@ -146,6 +156,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         -...
         -^d
         *** End Patch
+        \`\`\`
       </patch>
       <explanation>
         find a hunk with first line matches "aaa" and last line starts with "d".
@@ -156,30 +167,36 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     </example>
     <example description="disambiguate from duplicate lines">
       <content>
+        \`\`\`text
         aaa
         aaa
         ccc
         ccc
+        \`\`\`
       </content>
       <bad_patch>
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
          :aaa
         +bbb
         *** End Patch
+        \`\`\`
       </bad_patch>
       <explanation>
         " :aaa" is invalid, it does not have an operator as the first char.
         It should be "=:aaa".
       </explanation>
       <patch>
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@ @2
         =:aaa
         +bbb
         *** End Patch
+        \`\`\`
       </patch>
       <explanation>
         use line anchor to search at or after line 2.
@@ -187,14 +204,17 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         similarly, we can use "@2...2" to pin the line range to [2,2].
         then insert a new line after.
         <content description="result after patch">
-          aaa
-          aaa
-          bbb
-          ccc
-          ccc
+        \`\`\`text
+        aaa
+        aaa
+        bbb
+        ccc
+        ccc
+        \`\`\`
         </content>
       </explanation>
       <patch>
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
@@ -202,6 +222,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         +bbb
         =:ccc
         *** End Patch
+        \`\`\`
       </patch>
       <explanation>
         find a hunk with adjacent "aaa" and "ccc" lines.
@@ -210,16 +231,20 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     </example>
     <example description="use combined locator">
       <content>
+        \`\`\`text
         abcd
         cbdd
         acbb
+        \`\`\`
       </content>
       <patch description="delete the line 'abcd'">
+        \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
         -?{"prefix":"a","suffix":"d"}
         *** End Patch
+        \`\`\`
       </patch>
       <explanation>
         the locator targets line starts with "a" and ends with "d".
