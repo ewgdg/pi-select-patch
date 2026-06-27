@@ -49,15 +49,15 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     The syntax for line matcher is \`<operator><locator_marker>[<locator_value>]\`.
     Line matches in a hunk section are grouped to form a hunk match.
     #### Caveats
-    This format is not compatible with unified diff.
+    This format is not plain unified diff: context and delete rows still require a locator marker after the operator.
     Legacy forms like \`-<text>\` are not supported; use a locator marker, e.g. \`-:<text>\`.
     Only \`Update File\` section can have hunk match.
     #### Match Operators
-    Match operator (\`<operator>\`) can be either "-", "=".
+    Match operator (\`<operator>\`) can be either "-" or a literal space " ".
     It is the first char of the line matcher.
-    It cannot be empty or a space.
+    It cannot be omitted;
     "-" operator is used to delete the matched line.
-    "=" operator is a context only noop for matching/anchoring only.
+    space operator is a context-only noop for matching/anchoring only.
     #### Locators
     A locator identifies lines for context or deletion. 
     It always starts with a \`<locator_marker>\` and optionally a \`<locator_value>\`.
@@ -78,10 +78,10 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     \`#<hash>\` matches by line hash value; use \`read_hash\` to get current hashes.
     \`?<json-obj>\` is a combined locator.
     \`...\` is a range locator; it has no \`<locator_value>\`.
-    e.g. \`=:<text>\` means exact context text match; \`-:<text>\` means exact delete text match.
+    e.g. \` :<text>\` means exact context text match; \`-:<text>\` means exact delete text match.
     ##### Range Locator
     A range locator has to be used in-between other line matchers.
-    e.g. \`=...\` preserves/skips lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
+    e.g. \` ...\` preserves/skips lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
     ##### Combined Locator
     A combined locator uses a JSON object to specify locators to combine.
     Currently, "prefix", "suffix", "contains" are the allowed locator keys.
@@ -143,16 +143,16 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
-        =:before
-        =:
+         :before
+         :
         -:
-        =:after
+         :after
         +
         *** End Patch
         \`\`\`
       </patch>
       <explanation>
-        use "=:" to match a blank context line, "-:" to delete a blank line, and "+" with no following text to insert a blank line.
+        use " :" to match a blank context line, "-:" to delete a blank line, and "+" with no following text to insert a blank line.
         <content description="result after patch">
         \`\`\`text
         before
@@ -204,21 +204,21 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
-         :aaa
+        aaa
         +bbb
         *** End Patch
         \`\`\`
       </bad_patch>
       <explanation>
-        " :aaa" is invalid, it does not have an operator as the first char.
-        It should be "=:aaa".
+        "aaa" is invalid, it does not have an operator as the first char.
+        It should be " :aaa".
       </explanation>
       <patch>
         \`\`\`patch
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@ @2
-        =:aaa
+         :aaa
         +bbb
         *** End Patch
         \`\`\`
@@ -243,9 +243,9 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
         *** Begin Patch
         *** Update File: path/to/file.txt
         @@
-        =:aaa
+         :aaa
         +bbb
-        =:ccc
+         :ccc
         *** End Patch
         \`\`\`
       </patch>

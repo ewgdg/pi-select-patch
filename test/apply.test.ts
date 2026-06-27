@@ -46,51 +46,51 @@ describe("applyPatchToText", () => {
   it("matches prefix text locators for context and delete operations", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}",
-      patch("=^function parsePatchOp", "-^  return old", "+  return newValue;", "=:}")
+      patch(" ^function parsePatchOp", "-^  return old", "+  return newValue;", " :}")
     );
 
     expect(result.text).toBe("function parsePatchOp(line: string): PatchOp {\n  return newValue;\n}");
-    expect(result.hunkAudits[0].matchPattern).toEqual(["=^function parsePatchOp", "-^  return old", "=:}"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
   });
 
   it("matches suffix text locators for context and delete operations", () => {
     const result = applyPatchToText(
       "const value = computeOld();\nreturn value;\nfinished();",
-      patch("=$computeOld();", "-$value;", "+return nextValue;", "=$finished();")
+      patch(" $computeOld();", "-$value;", "+return nextValue;", " $finished();")
     );
 
     expect(result.text).toBe("const value = computeOld();\nreturn nextValue;\nfinished();");
-    expect(result.hunkAudits[0].matchPattern).toEqual(["=$computeOld();", "-$value;", "=$finished();"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" $computeOld();", "-$value;", " $finished();"]);
   });
 
   it("matches contains text locators for context and delete operations", () => {
     const result = applyPatchToText(
       "const value = computeOld();\nreturn value;\nfinished();",
-      patch("=*computeOld", "-*turn val", "+return nextValue;", "=*ished")
+      patch(" *computeOld", "-*turn val", "+return nextValue;", " *ished")
     );
 
     expect(result.text).toBe("const value = computeOld();\nreturn nextValue;\nfinished();");
-    expect(result.hunkAudits[0].matchPattern).toEqual(["=*computeOld", "-*turn val", "=*ished"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" *computeOld", "-*turn val", " *ished"]);
   });
 
   it("matches combined text locators by all supplied predicates", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}\nfinished();",
       patch(
-        '=?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
+        ' ?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
         '-?{"prefix":"  return","contains":"old","suffix":";"}',
         "+  return newValue;",
-        "=:}",
+        " :}",
         '=?{"contains":"finished"}'
       )
     );
 
     expect(result.text).toBe("function parsePatchOp(line: string): PatchOp {\n  return newValue;\n}\nfinished();");
     expect(result.hunkAudits[0].matchPattern).toEqual([
-      '=?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
+      ' ?{"prefix":"function ","contains":["parsePatchOp","PatchOp"],"suffix":" {"}',
       '-?{"prefix":"  return","contains":["old"],"suffix":";"}',
-      "=:}",
-      '=?{"contains":["finished"]}'
+      " :}",
+      ' ?{"contains":["finished"]}'
     ]);
   });
 

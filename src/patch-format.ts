@@ -132,20 +132,20 @@ function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): Pa
     const content = line.slice(1);
     return { kind: "insert", hash: hashFn(content), content };
   }
-  if (line.startsWith("=")) {
+  if (line.startsWith("=") || line.startsWith(" ")) {
     return parseSelectorPatchOp("context", line.slice(1), line, inputLine);
-  }
-  if (line.startsWith(" ")) {
-    throw new InvalidPatchError("Leading-space context rows are not supported. Use '=:' exact locators for context lines, including indented lines.", { inputLine });
   }
   if (line.startsWith("-")) {
     return parseSelectorPatchOp("delete", line.slice(1), line, inputLine);
   }
 
-  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use '=:<text>', '=^<prefix>', '=*<needle>', '=?{...}', '=$<suffix>', '-:<text>', '-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '+<text>', '=#<hash>', '-#<hash>', '=...', or '-...'.`, { inputLine });
+  throw new InvalidPatchError(`Malformed patch operation '${line}'. Use ' :<text>', ' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', '-:<text>', '-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '+<text>', ' #<hash>', '-#<hash>', ' ...', or '-...'.`, { inputLine });
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {
+  if (kind === "context" && selector === "") {
+    return { kind, content: "", textSelector: "exact" };
+  }
   if (selector === "...") {
     return { kind: "range", rangeKind: kind };
   }
@@ -174,9 +174,9 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
 
 
 function throwRawTextSelectorError(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): never {
-  const suggestedExactSelector = kind === "context" ? `=:${selector}` : `-:${selector}`;
+  const suggestedExactSelector = kind === "context" ? ` :${selector}` : `-:${selector}`;
   throw new InvalidPatchError(
-    `Raw ${kind} row detected: '${line}'. Rows use <operator><locator>; use exact locator '${suggestedExactSelector}', or one of ${kind === "context" ? "'=^<prefix>', '=*<needle>', '=?{...}', '=$<suffix>', '=#<hash>', or '=...'" : "'-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`,
+    `Raw ${kind} row detected: '${line}'. Rows use <operator><locator>; use exact locator '${suggestedExactSelector}', or one of ${kind === "context" ? "' ^<prefix>', ' *<needle>', ' ?{...}', ' $<suffix>', ' #<hash>', or ' ...'" : "'-^<prefix>', '-*<needle>', '-?{...}', '-$<suffix>', '-#<hash>', or '-...'"}.`,
     { inputLine }
   );
 }
@@ -268,7 +268,7 @@ function parseSuffixPatchOp(kind: MatchPatchOpKind, content: string, line: strin
 
 function parseHashPatchOp(kind: MatchPatchOpKind, hash: string, line: string, inputLine: number): MatchPatchOp {
   if (!isHash(hash)) {
-    throw new InvalidPatchError(`Malformed ${kind} hash operation '${line}'. Hash locators must be 3 or 4 base64url characters after '${kind === "context" ? "=#" : "-#"}'.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} hash operation '${line}'. Hash locators must be 3 or 4 base64url characters after '${kind === "context" ? " #" : "-#"}'.`, { inputLine });
   }
   return { kind, hash };
 }

@@ -300,19 +300,19 @@ function buildMatchPattern(hunk: Hunk): string[] {
 }
 
 function renderRangeLocator(rangeKind: "context" | "delete"): string {
-  return `${rangeKind === "context" ? "=" : "-"}...`;
+  return `${rangeKind === "context" ? " " : "-"}...`;
 }
 
 function renderMatchLocator(op: MatchPatchOp): string {
   if (!hasMatchLocator(op)) return "<missing locator>";
   if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) return "<invalid hash+text locator>";
   if (op.content !== undefined && op.combinedSelector !== undefined) return "<invalid mixed text locator>";
-  if (op.hash !== undefined) return `${op.kind === "context" ? "=#" : "-#"}${op.hash}`;
-  if (op.combinedSelector !== undefined) return `${op.kind === "context" ? "=?" : "-?"}${JSON.stringify(op.combinedSelector)}`;
-  const prefix = op.kind === "context" ? "=:" : "-:";
-  if (op.textSelector === "prefix") return `${op.kind === "context" ? "=^" : "-^"}${op.content ?? ""}`;
-  if (op.textSelector === "contains") return `${op.kind === "context" ? "=*" : "-*"}${op.content ?? ""}`;
-  if (op.textSelector === "suffix") return `${op.kind === "context" ? "=$" : "-$"}${op.content ?? ""}`;
+  if (op.hash !== undefined) return `${op.kind === "context" ? " #" : "-#"}${op.hash}`;
+  if (op.combinedSelector !== undefined) return `${op.kind === "context" ? " ?" : "-?"}${JSON.stringify(op.combinedSelector)}`;
+  const prefix = op.kind === "context" ? " :" : "-:";
+  if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
+  if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
+  if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;
   return `${prefix}${op.content ?? ""}`;
 }
 
@@ -340,10 +340,10 @@ function validateHunkAnchorHint(hunk: Hunk, hunkIndex: number): void {
 function validateNoConflictingLocators(hunk: Hunk, hunkIndex: number): void {
   for (const op of hunk.ops) {
     if (isMatchOp(op) && op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text locators are not supported; use hash-only (=#HASH/-#HASH, 3 or 4 chars) or text-only (=:text/-:text, =^prefix/-^prefix, =*needle/-*needle, =?{...}/-?{...}, or =$suffix/-$suffix).`);
+      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text locators are not supported; use hash-only ( #HASH/-#HASH, 3 or 4 chars) or text-only ( :text/-:text,  ^prefix/-^prefix,  *needle/-*needle,  ?{...}/-?{...}, or  $suffix/-$suffix).`);
     }
     if (isMatchOp(op) && op.content !== undefined && op.combinedSelector !== undefined) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} mixed text locators are not supported; use exactly one text locator form (=:text/-:text, =^prefix/-^prefix, =*needle/-*needle, =?{...}/-?{...}, or =$suffix/-$suffix).`);
+      throw new InvalidPatchError(`Hunk ${hunkIndex} mixed text locators are not supported; use exactly one text locator form ( :text/-:text,  ^prefix/-^prefix,  *needle/-*needle,  ?{...}/-?{...}, or  $suffix/-$suffix).`);
     }
     if (isMatchOp(op) && op.combinedSelector !== undefined) {
       op.combinedSelector = normalizeCombinedTextSelector(op.combinedSelector, `Hunk ${hunkIndex} combined selector`);

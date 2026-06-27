@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashLine, parsePatchInput, parseUniversalPatch, serializeUniversalPatch } from "../src/api.js";
 
-const row = (prefix: "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const row = (prefix: " " | "=" | "-" | "+", content: string) => prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
 
 describe("universal patch parser", () => {
   it("accepts Codex-like add, update, and delete file sections", () => {
@@ -35,7 +35,7 @@ describe("universal patch parser", () => {
       +    indented add content
       *** Update File: existing.txt
       @@
-      =:  old context
+       :  old context
       +  new content
       *** End Patch
     `);
@@ -54,16 +54,19 @@ describe("universal patch parser", () => {
     });
   });
 
-  it("keeps malformed extra leading space after wrapper dedent", () => {
-    const source = `
+  it("parses leading-space context rows after wrapper dedent", () => {
+    const parsed = parsePatchInput(`
       *** Begin Patch
       *** Update File: existing.txt
       @@
        :aaa
       *** End Patch
-    `;
+    `);
 
-    expect(() => parsePatchInput(source)).toThrow("Line 4: Leading-space context rows are not supported");
+    expect(parsed.operations[0]).toMatchObject({
+      kind: "update",
+      patch: { hunks: [{ ops: [{ kind: "context", content: "aaa" }] }] }
+    });
   });
 
   it("rejects add body lines without Codex plus prefixes", () => {
@@ -83,15 +86,15 @@ describe("universal patch parser", () => {
       "+hello",
       "*** Update File: existing.txt",
       "@@ @3...9",
-      row("=", "ctx"),
+      row(" ", "ctx"),
       row("-", "old"),
-      "=^ctx",
-      "=*middle",
-      '=?{"prefix":"pre","contains":["mid"],"suffix":"suf"}',
-      "=...",
+      " ^ctx",
+      " *middle",
+      ' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}',
+      " ...",
       row("+", "new"),
       "-...",
-      "=$after",
+      " $after",
       "*** Delete File: doomed.txt",
       "*** End Patch"
     ].join("\n");
@@ -100,25 +103,29 @@ describe("universal patch parser", () => {
 
     expect(serialized).toBe(source);
     expect(serialized).toContain("@@ @3...9");
-    expect(serialized).toContain(`=#${hashLine("ctx")}`);
+    expect(serialized).toContain(` #${hashLine("ctx")}`);
     expect(serialized).toContain(`-#${hashLine("old")}`);
-    expect(serialized).toContain("=^ctx");
-    expect(serialized).toContain("=*middle");
-    expect(serialized).toContain('=?{"prefix":"pre","contains":["mid"],"suffix":"suf"}');
-    expect(serialized).toContain("=$after");
+    expect(serialized).toContain(" ^ctx");
+    expect(serialized).toContain(" *middle");
+    expect(serialized).toContain(' ?{"prefix":"pre","contains":["mid"],"suffix":"suf"}');
+    expect(serialized).toContain(" $after");
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
-  it("rejects leading-space context rows inside universal patches", () => {
+  it("accepts leading-space context rows inside universal patches", () => {
     const source = [
       "*** Begin Patch",
       "*** Update File: existing.txt",
       "@@",
-      " literal context",
+      " :literal context",
       "*** End Patch"
     ].join("\n");
 
-    expect(() => parseUniversalPatch(source)).toThrow("Line 4: Leading-space context rows are not supported");
+    const [operation] = parseUniversalPatch(source).operations;
+    expect(operation).toMatchObject({
+      kind: "update",
+      patch: { hunks: [{ ops: [{ kind: "context", content: "literal context" }] }] }
+    });
   });
 
   it("round-trips exact, prefix, contains, combined, and suffix text selectors with marker characters", () => {

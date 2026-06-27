@@ -23,19 +23,19 @@ Preferred `patch` input is Codex-like and carries file paths. The tool accepts e
 +literal new file line
 *** Update File: existing.txt
 @@
-=:exact context text
+ :exact context text
 -:text to delete
-=#HHHH
+ #HHHH
 @@ @120...140
-=:start context text
-=...
+ :start context text
+ ...
 +literal insertion after skipped context
-=:end context text
+ :end context text
 @@
-=#HHHH
+ #HHHH
 -...
 +literal replacement content
-=:end context text
+ :end context text
 *** Delete File: old.txt
 *** End Patch
 ```
@@ -62,32 +62,32 @@ Update sections use locator hunks:
 
 ```diff
 @@
-=:exact context text
+ :exact context text
 -:text to delete
 +literal inserted content
 @@ @120...140
-=:start context text
-=*middle needle
-=?{"prefix":"start","contains":["middle","needle"],"suffix":"end"}
-=...
+ :start context text
+ *middle needle
+ ?{"prefix":"start","contains":["middle","needle"],"suffix":"end"}
+ ...
 +literal insertion after skipped context
-=#HHHH
+ #HHHH
 @@
-=#HHHH
+ #HHHH
 -...
 +literal replacement content
-=:end context text
+ :end context text
 ```
 
 Rules:
 
 - Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
-- Context/delete rows use `<operator><locator>` syntax: `<operator>` is `=` for context or `-` for delete; `<locator>` is `:`, `^`, `*`, `?`, `$`, `#`, or `...` plus selector-specific text, hash, or JSON. Forms: `=:<text>` / `-:<text>` = exact context/delete text, `=^<prefix>` / `-^<prefix>` = prefix context/delete text, `=*<needle>` / `-*<needle>` = contains context/delete text, `=?{...}` / `-?{...}` = combined context/delete text, `=$<suffix>` / `-$<suffix>` = suffix context/delete text, `=#<hash>` / `-#<hash>` = hash context/delete (3 or 4 base64url characters), `=...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector.
-  Context rows must start with `=`. Leading-space context compatibility rows are not supported; use `=:` for exact text, including indented lines.
-- Combined selector JSON (`=?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
+- Context/delete rows use `<operator><locator>` syntax: `<operator>` is a space for context or `-` for delete; `<locator>` is `:`, `^`, `*`, `?`, `$`, `#`, or `...` plus selector-specific text, hash, or JSON. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` #<hash>` / `-#<hash>` = hash context/delete (3 or 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector.
+  Context rows start with a literal space, matching unified-diff muscle memory. Use ` :` for exact text, including indented lines. Legacy `=` context rows are accepted by the parser for compatibility but are not emitted.
+- Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
 - Do not use `read_hash` output rows (`HASH│content`) as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
-- `=...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
+- ` ...` preserves every target line between the nearest surrounding context operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context operations. Add `+` lines after it to replace that range.
 - Hunks without ellipsis must match exactly one contiguous span in current target file. Hunks with ellipsis must match exactly one sparse span.
 - Zero matches = stale hunk. More than one match = ambiguous hunk.
@@ -110,15 +110,15 @@ after
 *** Begin Patch
 *** Update File: existing.txt
 @@
-=:before
-=:
+ :before
+ :
 -:
-=:after
+ :after
 +
 *** End Patch
 ```
 
-Use `=:` to match a blank context line, `-:` to delete a blank line, and `+` with no following text to insert a blank line.
+Use ` :` to match a blank context line, `-:` to delete a blank line, and `+` with no following text to insert a blank line.
 
 Result has one blank line between `before` and `after`, plus one blank line after `after`:
 
