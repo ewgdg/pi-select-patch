@@ -48,6 +48,10 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   A hunk can contain line matchers.
   The syntax for line matcher is \`<operator><locator_marker>[<locator_value>]\`.
   Line matches in a hunk section are grouped to form a hunk match.
+  #### Locator Choice Policy
+  Use the shortest prefix locator (\`^<prefix>\`) that uniquely identifies the target line in its hunk context.
+  Use exact text locators (\`:<text>\`) only for short lines, whitespace-significant lines, or when a prefix would be ambiguous.
+  Use hash locators (\`#<hash>\`) when read_hash supplied a hash and exact line identity matters.
   #### Caveats
   Locator rows are preferred, but malformed unified-diff muscle memory is tolerated.
   A context/delete row without a locator marker is parsed as unified diff: text after \` \`, \`=\`, or \`-\` is exact line content.
@@ -64,22 +68,22 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   It always starts with a \`<locator_marker>\` and optionally a \`<locator_value>\`.
   ##### Locator Markers
   A \`<locator_marker>\` is used to specify the type of locator.
-  ":" specifies an exact text locator.
   "^" specifies a prefix locator.
+  ":" specifies an exact text locator.
   "$" specifies a suffix locator.
   "*" specifies a contains locator.
   "#" specifies a hash locator.
   "?" specifies a combined locator.
   "..." specifies a range locator.
   ##### Locator Values
-  \`:<text>\` matches exact raw line text.
   \`^<prefix>\` matches by prefix string.
+  \`:<text>\` matches exact raw line text.
   \`$<suffix>\` matches by suffix string.
   \`*<text>\` matches by testing if a line contains the \`<text>\` value.
   \`#<hash>\` matches by line hash value; use \`read_hash\` to get current hashes.
   \`?<json-obj>\` is a combined locator.
   \`...\` is a range locator; it has no \`<locator_value>\`.
-  e.g. \` :<text>\` means exact context text match; \`-:<text>\` means exact delete text match.
+  e.g. \` ^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.
   ##### Range Locator
   A range locator has to be used in-between other line matchers.
   e.g. \` ...\` preserves/skips lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
@@ -103,20 +107,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
       old text
       \`\`\`
       </content>
-      <valid_but_not_preferred_patch>
-      \`\`\`patch
-      *** Begin Patch
-      *** Update File: path/to/file.txt
-      @@
-      -old text
-      +new text
-      *** End Patch
-      \`\`\`
-      </valid_but_not_preferred_patch>
-      <explanation>
-      "-old text" works through unified-diff exact mode. Prefer "-:old text" when intentionally writing locator patches.
-      </explanation>
-      <patch>
+      <not_preferred_exact_patch>
       \`\`\`patch
       *** Begin Patch
       *** Update File: path/to/file.txt
@@ -125,9 +116,22 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
       +new text
       *** End Patch
       \`\`\`
+      </not_preferred_exact_patch>
+      <explanation>
+      Exact text works, but prefix locators should use the shortest distinctive prefix that is enough.
+      </explanation>
+      <patch>
+      \`\`\`patch
+      *** Begin Patch
+      *** Update File: path/to/file.txt
+      @@
+      -^o
+      +new text
+      *** End Patch
+      \`\`\`
       </patch>
       <explanation>
-      delete the line matching exact text "old text" and insert "new text" at the same location.
+      delete the line starting with "o" and insert "new text" at the same location.
       </explanation>
     </example>
     <example description="blank line operations">
@@ -178,7 +182,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
       *** Begin Patch
       *** Update File: path/to/file.txt
       @@
-      -:aaa
+      -^a
       -...
       -^d
       *** End Patch
@@ -212,14 +216,14 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
       </bad_patch>
       <explanation>
       "aaa" is invalid, it does not have an operator as the first char.
-      It should be " :aaa".
+      It should use a locator row, usually the shortest distinctive prefix such as " ^a".
       </explanation>
       <patch>
       \`\`\`patch
       *** Begin Patch
       *** Update File: path/to/file.txt
       @@ @2
-       :aaa
+       ^a
       +bbb
       *** End Patch
       \`\`\`
@@ -244,9 +248,9 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
       *** Begin Patch
       *** Update File: path/to/file.txt
       @@
-       :aaa
+       ^a
       +bbb
-       :ccc
+       ^c
       *** End Patch
       \`\`\`
       </patch>
@@ -314,7 +318,6 @@ export const patchTool = defineTool({
   promptSnippet: "Prefer for normal token-efficient file edits; supports multi-file changes in one patch call.",
   promptGuidelines: [
     "Prefer `patch` tool over other text-replacement-based editing.",
-    "Prefer token-efficient locators (e.g. prefix locators over exact text locators) if possible for the `patch` tool.",
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. For large patches, save output tokens by editing the retry patch file and passing it via `patch_file` instead of re-emitting large patch text.",
     "On `patch` tool success, agent-visible output is compact file status only."
   ],
