@@ -147,6 +147,7 @@ function parseHunkHeader(line: string, inputLine: number): HunkAnchorHint | unde
 }
 
 function hasMissingLocatorMarker(line: string): boolean {
+  if (line === "") return true;
   if (line.startsWith("+")) return false;
   if (!(line.startsWith("=") || line.startsWith(" ") || line.startsWith("-"))) return false;
 
@@ -160,6 +161,9 @@ function hasLocatorMarker(selector: string): boolean {
 }
 
 function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
+  if (line === "") {
+    return { kind: "context", content: "", textSelector: "exact", unifiedDiff: true };
+  }
   if (line.startsWith("+")) {
     const content = line.slice(1);
     return { kind: "insert", hash: hashFn(content), content };

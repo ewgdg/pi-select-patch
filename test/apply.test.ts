@@ -122,6 +122,14 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" :a", "-:old", " :z"]);
   });
 
+  it("applies blank unified-diff rows as empty context lines", () => {
+    const result = applyPatchToText("a\n\nold\nz", patch(" a", "", "-old", "+new", " z"));
+
+    expect(result.text).toBe("a\n\nnew\nz");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["unifiedDiff", "unifiedDiff", "unifiedDiff", "unifiedDiff"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" :a", " :", "-:old", " :z"]);
+  });
+
   it("falls back to unified exact matching when locator matching finds no span", () => {
     const result = applyPatchToText("^literal\n#abc", patch(" ^literal", "-#abc", "+done"));
 

@@ -155,10 +155,11 @@ describe("patch parser", () => {
 
   it("parses unified-diff rows when locator markers are missing", () => {
     const hash = hashLine("ctx");
-    const parsed = parsePatch(["@@", ` ${hash}`, `-${hash}`, "+new", " context", "-"].join("\n"));
+    const parsed = parsePatch(["@@", ` ${hash}`, "", `-${hash}`, "+new", " context", "-"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: hash, textSelector: "exact" },
+      { kind: "context", content: "", textSelector: "exact", unifiedDiff: true },
       { kind: "delete", content: hash, textSelector: "exact" },
       { kind: "insert", content: "new" },
       { kind: "context", content: "context", textSelector: "exact" },
