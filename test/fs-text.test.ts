@@ -42,20 +42,27 @@ describe("text file IO", () => {
 
 describe("patch tool", () => {
   it("dry_run validates and returns status without writing", async () => {
-    const dir = await makeTempDir();
-    const file = join(dir, "file.txt");
-    await writeFile(file, "old");
-    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
+    const previous = process.env.PI_LOCATOR_PATCH_HASH_MODE;
+    process.env.PI_LOCATOR_PATCH_HASH_MODE = "0";
+    try {
+      const dir = await makeTempDir();
+      const file = join(dir, "file.txt");
+      await writeFile(file, "old");
+      const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
 
-    const result = await patchTool.execute("tool-call", { patch: diff, dry_run: true }, undefined, undefined, { cwd: dir } as never);
+      const result = await patchTool.execute("tool-call", { patch: diff, dry_run: true }, undefined, undefined, { cwd: dir } as never);
 
-    const content = result.content[0];
-    expect(content.type).toBe("text");
-    if (content.type !== "text") {
-      throw new Error("Expected text content");
+      const content = result.content[0];
+      expect(content.type).toBe("text");
+      if (content.type !== "text") {
+        throw new Error("Expected text content");
+      }
+      expect(content.text).toBe(["*** Update File: file.txt", "Validated"].join("\n"));
+      await expect(readFile(file, "utf8")).resolves.toBe("old");
+    } finally {
+      if (previous === undefined) delete process.env.PI_LOCATOR_PATCH_HASH_MODE;
+      else process.env.PI_LOCATOR_PATCH_HASH_MODE = previous;
     }
-    expect(content.text).toBe(["*** Update File: file.txt", "Validated"].join("\n"));
-    await expect(readFile(file, "utf8")).resolves.toBe("old");
   });
 
   it("leaves file unchanged when patch is stale", async () => {

@@ -55,23 +55,30 @@ describe("tool output size guards", () => {
   });
 
   it("writes huge patch result and returns compact status instead of full content", async () => {
-    const dir = await makeTempDir();
-    const file = join(dir, "file.txt");
-    await writeFile(file, "old");
-    const hugeReplacement = oversizedContent();
-    const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", hugeReplacement), "*** End Patch"].join("\n");
+    const previous = process.env.PI_LOCATOR_PATCH_HASH_MODE;
+    process.env.PI_LOCATOR_PATCH_HASH_MODE = "0";
+    try {
+      const dir = await makeTempDir();
+      const file = join(dir, "file.txt");
+      await writeFile(file, "old");
+      const hugeReplacement = oversizedContent();
+      const diff = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", hugeReplacement), "*** End Patch"].join("\n");
 
-    const result = await patchTool.execute(
-      "tool-call",
-      { patch: diff },
-      undefined,
-      undefined,
-      { cwd: dir } as never
-    );
+      const result = await patchTool.execute(
+        "tool-call",
+        { patch: diff },
+        undefined,
+        undefined,
+        { cwd: dir } as never
+      );
 
-    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
-    expect(resultText(result)).not.toContain(hugeReplacement);
-    await expect(readFile(file, "utf8")).resolves.toBe(hugeReplacement);
+      expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
+      expect(resultText(result)).not.toContain(hugeReplacement);
+      await expect(readFile(file, "utf8")).resolves.toBe(hugeReplacement);
+    } finally {
+      if (previous === undefined) delete process.env.PI_LOCATOR_PATCH_HASH_MODE;
+      else process.env.PI_LOCATOR_PATCH_HASH_MODE = previous;
+    }
   });
 
   it("writes patch result and falls back to compact status instead of overlarge inserted rows", async () => {

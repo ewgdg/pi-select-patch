@@ -105,15 +105,22 @@ describe("patch visible status", () => {
   });
 
   it("keeps compact status by default when hash mode is not configured", async () => {
-    const dir = await makePlainTempDir();
-    const file = join(dir, "file.txt");
-    await writeFile(file, "old");
-    const patch = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
+    const previous = process.env.PI_LOCATOR_PATCH_HASH_MODE;
+    process.env.PI_LOCATOR_PATCH_HASH_MODE = "0";
+    try {
+      const dir = await makePlainTempDir();
+      const file = join(dir, "file.txt");
+      await writeFile(file, "old");
+      const patch = ["*** Begin Patch", "*** Update File: file.txt", "@@", row("-", "old"), row("+", "new"), "*** End Patch"].join("\n");
 
-    const result = await patchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never);
+      const result = await patchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never);
 
-    expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
-    await expect(readFile(file, "utf8")).resolves.toBe("new");
+      expect(resultText(result)).toBe(["*** Update File: file.txt", "Applied"].join("\n"));
+      await expect(readFile(file, "utf8")).resolves.toBe("new");
+    } finally {
+      if (previous === undefined) delete process.env.PI_LOCATOR_PATCH_HASH_MODE;
+      else process.env.PI_LOCATOR_PATCH_HASH_MODE = previous;
+    }
   });
 
   it("applies update hunks with text-only locators", async () => {

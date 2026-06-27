@@ -83,7 +83,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   \`:<text>\` matches exact raw line text.
   \`$<suffix>\` matches by suffix string.
   \`*<text>\` matches by testing if a line contains the \`<text>\` value.
-  \`#<hash>\` matches by line hash value; use \`read_hash\` to get current hashes.
+  \`#<hash>\` matches by line hash value; use hash-line \`read\` in hash mode, or \`read_hash\` in default mode, to get current hashes.
   \`?<json-obj>\` is a combined locator.
   \`...\` is a range locator; it has no \`<locator_value>\`.
   e.g. \` ^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.
@@ -418,7 +418,7 @@ function buildPatchPromptGuidelines(hashMode: boolean): string[] {
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. Try fixing the retry patch file first and passing it via `patch_file` instead of re-emitting large patch text to save tokens."
   ];
   if (hashMode) {
-    guidelines.push("Hash mode active: use `read_hash` for text reads; `patch` success returns a compact hash-only receipt with context hashes, inserted-line hashes, and omitted deleted rows.");
+    guidelines.push("Hash mode active: use `read` for hash-line text reads; `patch` success returns a compact hash-only receipt with context hashes, inserted-line hashes, and omitted deleted rows.");
   }
   return guidelines;
 }
