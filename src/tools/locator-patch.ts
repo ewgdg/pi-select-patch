@@ -65,38 +65,35 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
     \`@@ @<line>\` starts searching at 1-based line \`<line>\` and requires the resolved match start to be at or after that line, while \`@@ @<start>...<end>\` requires the resolved match span to stay within inclusive 1-based line range [start, end].
     ### Hunk Match
     A hunk can contain line matchers.
-    The syntax for line matcher is \`<operator><selector><locator>\`.
+    The syntax for line matcher is \`<operator><locator>\`.
+    This format is not compatible with unified diff.
     Line matches in a hunk section are grouped to form a hunk match.
     Only \`Update File\` section can have hunk match.
-    e.g. \`-:<text>\`, \`=:<text>\`
     #### Match Operators
-    Match operator can be either "-", "=".
+    Match operator (\`<operator>\`) can be either "-", "=".
     "-" operator is used to delete the matched line.
     "=" operator is a context only noop for matching/anchoring only.
-    #### Selectors
-    Selectors specify the locator types.
-    ":" is a text selector for exact match of the locator followed it.
-    "^" is a prefix selector.
-    "$" is a suffix selector.
-    "*" is a contains selector.
-    "#" is a hash selector; use \`read_hash\` to get current hashes.
-    "?" is a combined selector.
-    "..." is a range selector.
-    ##### Range Selector
-    A range selector has to be used in-between other line matchers.
-    It has no following locators.
-    \`=...\` preserves lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
     #### Locators
-    Locators are selector-specific text, hash, JSON, or no text for \`...\`.
+    A locator (\`<locator>\`) identifies lines for context or deletion. Most locator forms start with a marker.
+    \`:<text>\` matches exact raw line text.
+    \`^<prefix>\` is a prefix locator.
+    \`$<suffix>\` is a suffix locator.
+    \`*<text>\` is a contains locator.
+    \`#<hash>\` is a hash locator; use \`read_hash\` to get current hashes.
+    \`?<json-obj>\` is a combined locator.
+    \`...\` is a range locator.
     e.g. \`=:<text>\` means exact context text match; \`-:<text>\` means exact delete text match.
-    ##### Contains Locator
-    \`*<text>\` means the line should contains the <text>.
+    ##### Range Locator
+    A range locator has to be used in-between other line matchers.
+    e.g. \`=...\` preserves lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
     ##### Combined Locator
-    A combined locator is a JSON object follows combined selector.
-    Currently, "prefix", "suffix", "contains" are allowed selector keys.
+    A combined locator uses a JSON object to specify locators to combine.
+    Currently, "prefix", "suffix", "contains" are the allowed locator keys.
     "contains" key can be mapped to a string or an array of strings.
-    The JSON object should contains at least one key.
+    The JSON object must contain at least one key.
     e.g. \`{"prefix":"a","contains":["b","c"],"suffix":"d"}\`
+    #### Compatibility Forms
+    \` <text>\` is a compatibility form of \`=:<text>\`.
     ### Insertion
     Patch uses "+" operator to insert lines.
     The syntax is \`+<text>\`, where \`<text>\` is a raw string for a line content.
@@ -104,6 +101,22 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   </description>
 
   <examples>
+    <example description="replace one line">
+      <content>
+        old text
+      </content>
+      <patch>
+        *** Begin Patch
+        *** Update File: path/to/file.txt
+        @@
+        -:old text
+        +new text
+        *** End Patch
+      </patch>
+      <explanation>
+        delete the line matching exact text "old text" and insert "new text" at the same location.
+      </explanation>
+    </example>
     <example description="range selection">
       <content>
         aaa
@@ -223,6 +236,7 @@ export const patchTool = defineTool({
   description: "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
   promptSnippet: "Prefer for normal token-efficient file edits; supports multi-file changes in one patch call.",
   promptGuidelines: [
+    "Prefer shorter locators if possible for the `patch` tool.",
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. For large patches, save output tokens by editing the retry patch file and passing it via `patch_file` instead of re-emitting large patch text.",
     "On `patch` tool success, agent-visible output is compact file status only."
   ],
