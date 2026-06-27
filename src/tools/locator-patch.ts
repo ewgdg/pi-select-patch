@@ -418,7 +418,7 @@ function buildPatchPromptGuidelines(hashMode: boolean): string[] {
     "During non-dry `patch` tool failures, the tool stops at the failed operation and writes a retry patch file containing unapplied operations. Try fixing the retry patch file first and passing it via `patch_file` instead of re-emitting large patch text to save tokens."
   ];
   if (hashMode) {
-    guidelines.push("Hash mode active: use `read` for hash-line text reads; `patch` success returns a compact hash-only receipt with context hashes, inserted-line hashes, and omitted deleted rows.");
+    guidelines.push("Hash mode active: use `read` for hash-line text reads; `patch` success returns a compact hash-only receipt with context hashes, inserted-line hashes. Treat patch receipt as current state for touched hunks. Reuse known hashes prior `read` and prior patch receipts to avoid unnecessary read.");
   }
   return guidelines;
 }
