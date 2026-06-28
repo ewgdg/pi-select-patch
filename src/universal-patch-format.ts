@@ -62,7 +62,6 @@ export function parseUniversalPatch(patchText: string, hashFn: HashFunction = ha
   if (operations.length === 0) {
     throw new InvalidPatchError("Universal patch must contain at least one file operation.");
   }
-  rejectDuplicatePaths(operations);
   return { operations };
 }
 
@@ -196,16 +195,6 @@ function sectionKind(rawKind: string): SectionKind {
 
 function isSectionHeader(line: string): boolean {
   return SECTION_HEADER_PATTERN.test(line);
-}
-
-function rejectDuplicatePaths(operations: readonly UniversalPatchOperation[]): void {
-  const seen = new Set<string>();
-  for (const operation of operations) {
-    if (seen.has(operation.path)) {
-      throw new InvalidPatchError(`Multiple operations for the same path are not supported: ${operation.path}`);
-    }
-    seen.add(operation.path);
-  }
 }
 
 function splitPatchLines(text: string): string[] {

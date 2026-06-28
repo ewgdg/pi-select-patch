@@ -469,6 +469,27 @@ describe("patch visible status", () => {
     await expect(stat(join(dir, "a.txt"))).rejects.toThrow();
   });
 
+  it("applies repeated update sections for the same file sequentially", async () => {
+    const dir = await makeTempDir();
+    await writeFile(join(dir, "one.txt"), "first");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: one.txt",
+      "@@",
+      row(" ", "first"),
+      row("+", "second"),
+      "*** Update File: one.txt",
+      "@@",
+      row(" ", "second"),
+      row("+", "third"),
+      "*** End Patch"
+    ].join("\n");
+
+    await patchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never);
+
+    await expect(readFile(join(dir, "one.txt"), "utf8")).resolves.toBe("first\nsecond\nthird");
+  });
+
   it("applies a multi-file patch", async () => {
     const dir = await makeTempDir();
     await writeFile(join(dir, "one.txt"), "old");

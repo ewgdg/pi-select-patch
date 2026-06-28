@@ -250,7 +250,7 @@ describe("applyPatchToText", () => {
     expect(mixedAnchorsResult.text).toBe("middle\nlast");
   });
 
-  it("applies multiple hunks sequentially", () => {
+  it("does not let later hunks match lines inserted by earlier hunks", () => {
     const text = "a\nb\nc";
     const multi = [
       "@@",
@@ -262,7 +262,25 @@ describe("applyPatchToText", () => {
       row("+", "between"),
       row(" ", "c")
     ].join("\n");
-    expect(applyPatchToText(text, multi).text).toBe("a\nbb\nbetween\nc");
+    expect(() => applyPatchToText(text, multi)).toThrow(StaleHunkError);
+  });
+
+  it("does not let later hunks reuse original lines touched by earlier hunks", () => {
+    const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row(" ", "b"), row("+", "y")].join("\n");
+
+    expect(() => applyPatchToText("a\nb\nc", multi)).toThrow(StaleHunkError);
+  });
+
+  it("does not let later sparse hunks span lines touched by earlier hunks", () => {
+    const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row(" ", "a"), " ...", row(" ", "d"), row("+", "y")].join("\n");
+
+    expect(() => applyPatchToText("a\nb\nc\nd", multi)).toThrow(StaleHunkError);
+  });
+
+  it("lets later hunks match untouched original lines after earlier hunks shift offsets", () => {
+    const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row("+", "y"), row(" ", "c")].join("\n");
+
+    expect(applyPatchToText("a\nb\nc", multi).text).toBe("a\nb\nx\ny\nc");
   });
 
   it("allows duplicate lines elsewhere when full match sequence is unique", () => {

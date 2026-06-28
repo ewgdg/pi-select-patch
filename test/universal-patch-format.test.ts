@@ -24,6 +24,25 @@ describe("universal patch parser", () => {
     expect(parsed.operations[0]).toMatchObject({ kind: "add", path: "added.txt", lines: ["hello", "world"] });
   });
 
+  it("accepts repeated update sections for the same path in authored order", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: existing.txt",
+      "@@",
+      row(" ", "first"),
+      row("+", "second"),
+      "*** Update File: existing.txt",
+      "@@",
+      row(" ", "second"),
+      row("+", "third"),
+      "*** End Patch"
+    ].join("\n");
+
+    const parsed = parseUniversalPatch(patch);
+
+    expect(parsed.operations.map((operation) => operation.path)).toEqual(["existing.txt", "existing.txt"]);
+  });
+
   it("rejects wrapper-less patches", () => {
     expect(() => parsePatchInput(["@@", row("-", "old"), row("+", "new")].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });

@@ -59,10 +59,17 @@ export interface ApplyPatchResult {
 }
 
 interface AppliedHunk {
-  lines: string[];
+  lines: PatchLineState[];
   receipt: PatchHunkReceipt;
   transcript: PatchHunkTranscript;
   audit: PatchHunkAudit;
+}
+
+interface PatchLineState {
+  content: string;
+  // Hunks in one update section are Codex/unified-diff-like: later hunks may only
+  // anchor on untouched original target lines, not earlier insertions or reused context.
+  availableForHunkMatch: boolean;
 }
 
 export function applyPatchToText(
@@ -73,7 +80,7 @@ export function applyPatchToText(
   const hashFn = options.hashFn ?? hashLine;
   const patch = typeof patchInput === "string" ? parsePatch(patchInput, hashFn) : patchInput;
   const model = parseText(text);
-  let currentLines = [...model.lines];
+  let currentLines = model.lines.map((content) => ({ content, availableForHunkMatch: true }));
   const hunkReceipts: PatchHunkReceipt[] = [];
   const hunkAudits: PatchHunkAudit[] = [];
   const hunkTranscripts: PatchHunkTranscript[] = [];
@@ -88,10 +95,10 @@ export function applyPatchToText(
 
   const finalText = serializeText({
     ...model,
-    lines: currentLines,
+    lines: currentLines.map((line) => line.content),
     finalNewline: currentLines.length > 0 ? model.finalNewline : false
   });
-  const entries = toHashLines(currentLines, hashFn);
+  const entries = toHashLines(currentLines.map((line) => line.content), hashFn);
   return {
     text: finalText,
     entries,
@@ -114,7 +121,7 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
   return `${line.kind === "insert" ? "+" : " "}${line.hash}`;
 }
 
-function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
+function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
   validateNoConflictingLocators(hunk, hunkIndex);
   const matchPattern = buildMatchPattern(hunk);
@@ -128,7 +135,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
       const insertedPatchCharCount = hunk.ops.reduce((total, op) => total + authoredCharCount(op, prefixedLineCharCount(op.content)), 0);
       const insertedBaselineCharCount = hunk.ops.reduce((total, op) => total + prefixedLineCharCount(op.content), 0);
       return {
-        lines: hunk.ops.map((op) => op.content),
+        lines: hunk.ops.map((op) => ({ content: op.content, availableForHunkMatch: false })),
         receipt: {
           hunkIndex,
           lines: insertedHashes.map((hash) => ({ kind: "insert", hash }))
@@ -156,7 +163,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
 
   validateSparseRanges(hunk, hunkIndex);
 
-  const currentEntries = lines.map((content) => ({ content, hash: hashFn(content) }));
+  const currentEntries = lines.map((line) => ({ content: line.content, hash: hashFn(line.content), availableForHunkMatch: line.availableForHunkMatch }));
   const matchOps = hunk.ops.filter(isMatchOp);
   const searchStart = getAnchorSearchStart(hunk);
   const searchEnd = getAnchorSearchEnd(hunk);
@@ -171,7 +178,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
   }
 
   const match = matches[0];
-  const replacement: string[] = [];
+  const replacement: PatchLineState[] = [];
   const receiptLines: PatchReceiptLine[] = [];
   const survivingContextHashes: string[] = [];
   const insertedHashes: string[] = [];
@@ -184,7 +191,7 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
     if (op.kind === "insert") {
       patchCharCount += authoredCharCount(op, prefixedLineCharCount(op.content));
       baselineCharCount += prefixedLineCharCount(op.content);
-      replacement.push(op.content);
+      replacement.push({ content: op.content, availableForHunkMatch: false });
       transcriptLines.push({ kind: "insert", content: op.content });
       const insertedHash = hashFn(op.content);
       insertedHashes.push(insertedHash);
@@ -200,11 +207,11 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
       }
       if (op.rangeKind === "context") {
         baselineCharCount += rangeCharCount(lines, range.start, range.end);
-        replacement.push(...lines.slice(range.start, range.end));
+        replacement.push(...lines.slice(range.start, range.end).map(markLineTouched));
         transcriptLines.push({ kind: "contextRange", content: renderSkippedContextRange(range.end - range.start) });
       } else {
         for (let lineIndex = range.start; lineIndex < range.end; lineIndex += 1) {
-          const targetContent = lines[lineIndex];
+          const targetContent = lines[lineIndex].content;
           baselineCharCount += prefixedLineCharCount(targetContent);
           const targetHash = hashFn(targetContent);
           transcriptLines.push({ kind: "delete", content: targetContent });
@@ -218,12 +225,12 @@ function applyHunk(lines: string[], hunk: Hunk, hunkIndex: number, hashFn: HashF
     if (targetIndex === undefined) {
       throw new Error("Internal patch error: missing hash operation match.");
     }
-    const targetContent = lines[targetIndex];
+    const targetContent = lines[targetIndex].content;
     patchCharCount += authoredCharCount(op, renderMatchLocator(op).length);
     baselineCharCount += prefixedLineCharCount(targetContent);
     const targetHash = hashFn(targetContent);
     if (op.kind === "context") {
-      replacement.push(targetContent);
+      replacement.push(markLineTouched(lines[targetIndex]));
       transcriptLines.push({ kind: "context", content: targetContent });
       survivingContextHashes.push(targetHash);
       receiptLines.push({ kind: "context", hash: targetHash });
@@ -265,10 +272,15 @@ function isMatchOp(op: Hunk["ops"][number]): op is MatchPatchOp {
 interface CurrentLineEntry {
   hash: string;
   content: string;
+  availableForHunkMatch: boolean;
 }
 
 function lineMatchesOp(line: CurrentLineEntry, op: MatchPatchOp): boolean {
-  return hasMatchLocator(op) && (op.hash === undefined || op.hash === line.hash.slice(0, op.hash.length)) && textSelectorMatches(line.content, op);
+  return line.availableForHunkMatch && hasMatchLocator(op) && (op.hash === undefined || op.hash === line.hash.slice(0, op.hash.length)) && textSelectorMatches(line.content, op);
+}
+
+function markLineTouched(line: PatchLineState): PatchLineState {
+  return { content: line.content, availableForHunkMatch: false };
 }
 
 function textSelectorMatches(content: string, op: MatchPatchOp): boolean {
@@ -366,10 +378,10 @@ function authoredCharCount(op: Hunk["ops"][number], fallback: number): number {
   return op.authoredCharCount ?? fallback;
 }
 
-function rangeCharCount(lines: readonly string[], start: number, end: number): number {
+function rangeCharCount(lines: readonly PatchLineState[], start: number, end: number): number {
   let total = 0;
   for (let index = start; index < end; index += 1) {
-    total += prefixedLineCharCount(lines[index]);
+    total += prefixedLineCharCount(lines[index].content);
   }
   return total;
 }
@@ -469,10 +481,15 @@ function collectSparseMatches(state: {
   }
 
   for (let end = state.position; end <= state.entries.length && end <= state.searchEnd && state.matches.length < state.maxMatches; end += 1) {
+    if (!rangeIsAvailableForHunkMatch(state.entries, state.position, end)) continue;
     const ranges = new Map(state.ranges);
     ranges.set(opIndex, { start: state.position, end });
     collectSparseMatches({ ...state, opIndex: opIndex + 1, position: end, ranges });
   }
+}
+
+function rangeIsAvailableForHunkMatch(entries: readonly CurrentLineEntry[], start: number, end: number): boolean {
+  return entries.slice(start, end).every((entry) => entry.availableForHunkMatch);
 }
 
 function nextMatchOpIndex(ops: readonly Hunk["ops"][number][], start: number): number | undefined {

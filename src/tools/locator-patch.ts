@@ -39,6 +39,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   \`Add File\` sections contain body rows only: \`+<text>\`. They do not use \`@@\` hunks.
   ## Hunk Sections
   Each \`Update File\` section may contain multiple \`@@\` hunks.
+  Within one \`Update File\` section, later hunks may match or span only untouched original target lines; they cannot anchor on or range across lines inserted or already used by earlier hunks. To make an edit depend on prior output, use a later \`*** Update File\` section for the same path.
   Hunk headers are \`@@\`.
   ### Line Anchor
   A line anchor can be appended to a hunk header.

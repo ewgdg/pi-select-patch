@@ -63,7 +63,7 @@ PI_LOCATOR_PATCH_HASH_MODE=0 pi   # force default mode
 - `*** Update File: path` applies locator hunks to an existing UTF-8 text file.
 - `*** Delete File: path` hard-deletes an existing regular text file. Delete sections have no body.
 
-One operation per path is supported.
+Multiple operations may target the same path. File operations run in authored order, so a later `*** Update File` section can match output created by an earlier section.
 
 ### Update hunks
 
@@ -91,7 +91,7 @@ Locators:
 Hash prefix locator `#<hash>` is preferred in hash mode when `read` supplies a visible hash. In default mode, prefer text locators; use hash locators only for hashes already known from prior receipts or other trusted context. Use text locators when a line has no visible hash or when content predicates are clearer.
 Context rows start with a literal space. Use ` :` for exact text, including indented lines.
 
-Malformed unified-diff rows are tolerated per matcher. A context/delete row without a locator marker treats text after ` ` or `-` as exact line content. Locator matching runs once; zero matches are stale and multiple matches are ambiguous.
+Malformed unified-diff rows are tolerated per matcher. A context/delete row without a locator marker treats text after ` ` or `-` as exact line content. Locator matching runs once; zero matches are stale and multiple matches are ambiguous. Within one `*** Update File` section, later hunks may match or span only untouched original target lines. They cannot anchor on or range across lines inserted or already used by earlier hunks in the same section. Use a later `*** Update File` section when a second edit must depend on prior output.
 
 ### Output and failure behavior
 
