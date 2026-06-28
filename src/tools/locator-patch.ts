@@ -49,7 +49,6 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   A hunk can contain line matchers.
   The syntax for line matcher is \`<operator><locator_marker>[<locator_value>]\`.
   Line matches in a hunk section are grouped to form a hunk match.
-  
   #### Match Operators
   Match operator (\`<operator>\`) can be either "-" or a literal space " ".
   It is the first char of the line matcher.
