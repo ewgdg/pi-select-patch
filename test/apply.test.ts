@@ -53,6 +53,17 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
   });
 
+  it("matches omitted-space context locator rows without unified-diff matching", () => {
+    const result = applyPatchToText(
+      "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}",
+      patch("^function parsePatchOp", "-^  return old", "+  return newValue;", ":}")
+    );
+
+    expect(result.text).toBe("function parsePatchOp(line: string): PatchOp {\n  return newValue;\n}");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["prefix", "prefix", "exact"]);
+    expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
+  });
+
   it("matches suffix text locators for context and delete operations", () => {
     const result = applyPatchToText(
       "const value = computeOld();\nreturn value;\nfinished();",

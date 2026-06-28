@@ -113,11 +113,15 @@ interface PatchOperationLine {
 }
 
 function parseHunkOperationLines(opLines: readonly PatchOperationLine[], hashFn: HashFunction): PatchOp[] {
-  return opLines.map((opLine) =>
-    hasMissingLocatorMarker(opLine.line)
-      ? parseUnifiedDiffOp(opLine.line, hashFn, opLine.inputLine)
-      : parsePatchOp(opLine.line, hashFn, opLine.inputLine)
-  );
+  return opLines.map((opLine) => {
+    if (hasMissingLocatorMarker(opLine.line)) {
+      return parseUnifiedDiffOp(opLine.line, hashFn, opLine.inputLine);
+    }
+    if (hasOmittedContextOperator(opLine.line)) {
+      return parseSelectorPatchOp("context", opLine.line, opLine.line, opLine.inputLine);
+    }
+    return parsePatchOp(opLine.line, hashFn, opLine.inputLine);
+  });
 }
 
 const HUNK_HEADER_PATTERN = /^@@(?: @([1-9]\d*)(?:\.\.\.([1-9]\d*))?)?$/;
@@ -158,6 +162,10 @@ function hasMissingLocatorMarker(line: string): boolean {
   const selector = line.slice(1);
   if (selector === "") return line.startsWith("-");
   return !hasLocatorMarker(selector);
+}
+
+function hasOmittedContextOperator(line: string): boolean {
+  return hasLocatorMarker(line);
 }
 
 function hasLocatorMarker(selector: string): boolean {

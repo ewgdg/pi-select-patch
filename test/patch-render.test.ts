@@ -234,13 +234,13 @@ describe("patch renderer helpers", () => {
       "*** Update File: file.txt",
       "@@",
       ...Array.from({ length: COLLAPSED_ERROR_INPUT_MAX_LINES - 2 }, (_, index) => `+extra-${index}`),
-      " old raw context",
+      "old raw context",
       "+new",
       "*** End Patch"
     ].join("\n");
 
     const rendered = buildPatchResultRenderText({
-      resultText: "[E_INVALID_PATCH] Line 18: Leading-space context rows are not supported.",
+      resultText: "[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or locator row.",
       details: undefined,
       expanded: false,
       isPartial: false,
@@ -249,10 +249,10 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Leading-space context rows are not supported.</error>");
+    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or locator row.</error>");
     expect(rendered).toContain("Agent input around line 18 (patch, lines 14-20 of 20):");
     expect(rendered).toContain("... 13 earlier input lines omitted");
-    expect(rendered).toContain("<error>18 │ </error><toolDiffContext> old raw context</toolDiffContext>");
+    expect(rendered).toContain("<error>18 │ </error><toolDiffContext>old raw context</toolDiffContext>");
     expect(rendered).toContain("<dim>19 │ </dim><toolDiffAdded>+new</toolDiffAdded>");
     expect(rendered).not.toContain("*** Begin Patch");
   });

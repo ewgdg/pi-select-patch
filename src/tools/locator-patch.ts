@@ -52,10 +52,13 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   Line matches in a hunk section are grouped to form a hunk match.
   #### Match Operators
   Match operator (\`<operator>\`) can be either "-" or a literal space " ".
-  It is the first char of the line matcher.
-  It cannot be omitted;
-  "-" operator is used to delete the matched line.
+  When present, it is the first char of the line matcher.
+  "-" operator is required to delete the matched line.
   space operator is a context-only noop for matching/anchoring only.
+  <shorthand>
+  For context locator rows, the space operator may be omitted.
+  e.g. \`^prefix\` is equivalent to \` ^prefix\`, and \`...\` is equivalent to \` ...\`.
+  </shorthand>
   #### Locators
   A locator identifies lines for context or deletion.
   It always starts with a \`<locator_marker>\` and optionally a \`<locator_value>\`.
@@ -68,6 +71,12 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   "#" specifies a hash locator.
   "?" specifies a combined locator.
   "..." specifies a range locator.
+  <shorthand>
+  If no locator marker follows the operator, the row is parsed as unified-diff form for exact text match.
+  e.g. \` text\` is exact context, \`-text\` is exact delete.
+  Bare exact context text without leading space, e.g. \`text\`, is invalid.
+  To match literal text starting with a reserved locator marker, keep an explicit locator marker.
+  </shorthand>
   ##### Locator Values
   \`^<prefix>\` matches by prefix string.
   \`:<text>\` matches exact raw line text.
@@ -76,7 +85,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   \`#<hash>\` matches by line hash value; use hash-line \`read\` in hash mode, or prior patch receipts/trusted context, to get current hashes.
   \`?<json-obj>\` is a combined locator.
   \`...\` is a range locator; it has no \`<locator_value>\`.
-  e.g. \` ^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.
+  e.g. \` ^<prefix>\` or \`^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.
   ##### Range Locator
   A range locator has to be used in-between other line matchers.
   e.g. \` ...\` preserves/skips lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.
@@ -106,8 +115,6 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   </policy>
   
   <caveats>
-  Locator rows are preferred, but malformed unified-diff muscle memory is tolerated.
-  A context/delete row without a locator marker is parsed as unified diff: text after \` \`, or \`-\` is exact line content.
   Only \`Update File\` section can have hunk match.
   </caveats>
 

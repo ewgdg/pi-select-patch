@@ -43,8 +43,12 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects bare ellipsis rows", () => {
-    expect(() => parsePatch("@@\n...")).toThrow("[E_INVALID_PATCH]");
+  it("accepts bare ellipsis rows as omitted-space context ranges", () => {
+    const parsed = parsePatch("@@\n...");
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "range", rangeKind: "context" }
+    ]);
   });
 
   it("allows separator in insert operation content", () => {
@@ -153,6 +157,22 @@ describe("patch parser", () => {
     ]);
   });
 
+  it("accepts omitted-space context locator rows", () => {
+    const parsed = parsePatch(["@@", ":literal context", ":", "^foo", "#abc", "*needle", "$tail", '?{"contains":"done"}', "..."].join("\n"));
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "literal context", textSelector: "exact" },
+      { kind: "context", content: "", textSelector: "exact" },
+      { kind: "context", content: "foo", textSelector: "prefix" },
+      { kind: "context", hash: "abc" },
+      { kind: "context", content: "needle", textSelector: "contains" },
+      { kind: "context", content: "tail", textSelector: "suffix" },
+      { kind: "context", combinedSelector: { contains: ["done"] } },
+      { kind: "range", rangeKind: "context" }
+    ]);
+    expect(parsed.hunks[0].ops).not.toContainEqual(expect.objectContaining({ unifiedDiff: true }));
+  });
+
   it("parses unified-diff rows when locator markers are missing", () => {
     const hash = hashLine("ctx");
     const parsed = parsePatch(["@@", ` ${hash}`, "", `-${hash}`, "+new", " context", "-"].join("\n"));
@@ -166,6 +186,10 @@ describe("patch parser", () => {
       { kind: "delete", content: "", textSelector: "exact" }
     ]);
     expect(() => parsePatch(["@@", `~${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
+  });
+
+  it("rejects bare unified-diff context rows", () => {
+    expect(() => parsePatch("@@\ncontext")).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects line-number hunk headers", () => {
