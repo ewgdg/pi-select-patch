@@ -103,12 +103,12 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
 
   <policy>
   <important>Token efficiency is the highest priority.</important>
-  Use patch locators when target/context lines are long enough that shortened prefix/suffix/contains saves more than patch locator marker cost — roughly >10 chars or >2 words. For tiny unique lines, exact-text/unified-diff may be cheaper.
+  Use partial-match-based locators when target/context lines are long enough that shortened prefix/suffix/contains saves more than patch locator marker cost — roughly >10 chars or >2 words.
   Use hash locators when a hash is already known for a line.
   Use the shortest prefix/suffix/contains locator that uniquely identifies the target line in its hunk context.
-  Use range locator whenever possible for hunks > 3 lines.
+  <important>Use range locator whenever possible for hunks > 3 lines.</important>
   Use line anchors to disambiguate only if the latest accurate line offset is available or add extra redundancy to the anchors.
-  Avoid exact text locators and unified-diff format unless for very short lines, or when necessary to disambiguate hunk matches.
+  Avoid exact text locators and unified-diff format unless absolutely necessary to disambiguate hunk matches.
   Increasing the hunk context range with shorter locators for unambiguous anchoring is usually more efficient than using exact text matches or unified-diff for long lines.
   If the tool returns a retry patch file containing large chunks of unapplied operations due to failures. Try fixing the retry patch file and passing it via \`patch_file\` instead of re-emitting large patch text to save tokens.
   </policy>
