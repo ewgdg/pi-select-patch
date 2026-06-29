@@ -7,6 +7,7 @@ export interface LocatorPatchConfig {
 }
 
 const ENV_HASH_MODE = "PI_LOCATOR_PATCH_HASH_MODE";
+const EXTENSION_CONFIG_PATH = ["extensions", "pi-locator-patch", "config.json"] as const;
 
 export async function readLocatorPatchConfig(): Promise<LocatorPatchConfig> {
   const globalConfig = await readConfigJson(globalConfigPath());
@@ -14,7 +15,7 @@ export async function readLocatorPatchConfig(): Promise<LocatorPatchConfig> {
 }
 
 function globalConfigPath(): string {
-  return join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "pi-locator-patch.json");
+  return join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), ...EXTENSION_CONFIG_PATH);
 }
 
 async function readConfigJson(path: string): Promise<unknown> {

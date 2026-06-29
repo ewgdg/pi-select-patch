@@ -16,7 +16,9 @@ async function makeAgentDir(config?: unknown) {
   const dir = await mkdtemp(join(tmpdir(), "pi-locator-patch-agent-"));
   process.env.PI_CODING_AGENT_DIR = dir;
   if (config !== undefined) {
-    await writeFile(join(dir, "pi-locator-patch.json"), JSON.stringify(config));
+    const configDir = join(dir, "extensions", "pi-locator-patch");
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, "config.json"), JSON.stringify(config));
   }
   return dir;
 }
@@ -27,7 +29,7 @@ function restoreEnv(name: string, value: string | undefined): void {
 }
 
 describe("locator patch config", () => {
-  it("reads hash mode from global pi-locator-patch.json", async () => {
+  it("reads hash mode from extension config.json", async () => {
     await makeAgentDir({ hashMode: true });
 
     await expect(readLocatorPatchConfig()).resolves.toEqual({ hashMode: true });

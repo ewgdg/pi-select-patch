@@ -15,7 +15,7 @@ Allow locator-patch to switch into all-in hash mode by config or environment ove
 
 ```pseudo
 on session start:
-  read hashMode from global pi-locator-patch.json, overridden by PI_LOCATOR_PATCH_HASH_MODE when present
+  read hashMode from extension config.json, overridden by PI_LOCATOR_PATCH_HASH_MODE when present
   ignore project-local configuration for hash mode
   active tools := current active tools without edit, write, locator_read, locator_patch
   if hashMode is true:

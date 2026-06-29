@@ -17,8 +17,9 @@ afterEach(() => {
 async function makeTempDir() {
   const dir = await makePlainTempDir();
   const agentDir = join(dir, "agent");
-  await mkdir(agentDir);
-  await writeFile(join(agentDir, "pi-locator-patch.json"), JSON.stringify({ hashMode: true }));
+  const configDir = join(agentDir, "extensions", "pi-locator-patch");
+  await mkdir(configDir, { recursive: true });
+  await writeFile(join(configDir, "config.json"), JSON.stringify({ hashMode: true }));
   process.env.PI_CODING_AGENT_DIR = agentDir;
   return dir;
 }
