@@ -56,7 +56,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   space operator is a context-only noop for matching/anchoring only.
   <shorthand>
   For context locator rows, the space operator may be omitted.
-  e.g. \`^prefix\` is equivalent to \` ^prefix\`, and \`...\` is equivalent to \` ...\`.
+  e.g. \`^prefix\` is equivalent to \` ^prefix\`, \`~target text\` is equivalent to \` ~target text\`, and \`...\` is equivalent to \` ...\`.
   </shorthand>
   #### Locators
   A locator identifies lines for context or deletion.
@@ -67,6 +67,7 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   ":" specifies an exact text locator.
   "$" specifies a suffix locator.
   "*" specifies a contains locator.
+  "~" specifies an opt-in smart locator.
   "#" specifies a hash locator.
   "?" specifies a combined locator.
   "..." specifies a range locator.
@@ -81,10 +82,13 @@ const PATCH_PARAMETER_DESCRIPTION = dedentBlock(`
   \`:<text>\` matches exact raw line text.
   \`$<suffix>\` matches by suffix string.
   \`*<text>\` matches by testing if a line contains the \`<text>\` value.
+  \`~<text>\` resolves independently per smart row to exact, prefix/suffix, contains, or line-level whitespace token-subsequence; the whole hunk applies only with one dominance winner.
   \`#<hash>\` matches by line hash value; use hash-line \`read\` in hash mode, or prior patch receipts/trusted context, to get current hashes.
   \`?<json-obj>\` is a combined locator.
   \`...\` is a range locator; it has no \`<locator_value>\`.
   e.g. \` ^<prefix>\` or \`^<prefix>\` means prefix context match; \`-^<prefix>\` means prefix delete match.
+  e.g. \` ~<text>\` or \`~<text>\` means smart context match; \`-~<text>\` means smart delete match. Use \`:<text>\` when a literal line starts with \`~\`.
+  Smart broad tiers require useful nonblank alphanumeric text; token-subsequence also requires at least two whitespace tokens.
   ##### Range Locator
   A range locator has to be used in-between other line matchers.
   e.g. \` ...\` preserves/skips lines between surrounding matchers; \`-...\` deletes lines between surrounding matchers.

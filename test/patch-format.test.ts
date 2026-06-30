@@ -185,7 +185,6 @@ describe("patch parser", () => {
       { kind: "context", content: "context", textSelector: "exact" },
       { kind: "delete", content: "", textSelector: "exact" }
     ]);
-    expect(() => parsePatch(["@@", `~${hash}`].join("\n"))).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects bare unified-diff context rows", () => {
@@ -219,4 +218,22 @@ describe("patch parser", () => {
     const patch = ["--- a", "+++ b", "@@", row(" ", "ctx")].join("\n");
     expect(() => parsePatch(patch)).toThrow("[E_INVALID_PATCH]");
   });
+
+  it("accepts smart context/delete locators and leaves smart-looking inserts literal", () => {
+    const parsed = parsePatch(["@@", " ~target text", "~omitted context", "-~old text", "+~literal insert"].join("\n"));
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "target text", textSelector: "exact", smart: true },
+      { kind: "context", content: "omitted context", textSelector: "exact", smart: true },
+      { kind: "delete", content: "old text", textSelector: "exact", smart: true },
+      { kind: "insert", content: "~literal insert" }
+    ]);
+  });
+
+  it("rejects empty smart locators", () => {
+    expect(() => parsePatch("@@\n ~")).toThrow("Line 2: Malformed context smart locator. Expected non-empty text after ~.");
+    expect(() => parsePatch("@@\n~")).toThrow("Line 2: Malformed context smart locator. Expected non-empty text after ~.");
+    expect(() => parsePatch("@@\n-~")).toThrow("Line 2: Malformed delete smart locator. Expected non-empty text after ~.");
+  });
+
 });

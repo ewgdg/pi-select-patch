@@ -356,4 +356,90 @@ describe("applyPatchToText", () => {
     expect(result.text).toBe("\uFEFFa\r\nnew\r\n");
     expect(applyPatchToText("a\nold", patch(row(" ", "a"), row("-", "old"), row("+", "new"))).text).toBe("a\nnew");
   });
+
+  it("resolves smart locators by exact before broader tiers", () => {
+    const result = applyPatchToText("target text\ntarget text plus", patch("-~target text", "+replacement"));
+
+    expect(result.text).toBe("replacement\ntarget text plus");
+    expect(result.hunkAudits[0].matchPattern).toEqual(["-~target text"]);
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact"]);
+  });
+
+  it("resolves each smart row independently and audits per-row matcher kind", () => {
+    const result = applyPatchToText("alpha exact\nprefix contains target suffix", patch(" ~alpha exact", "-~contains target", "+replacement"));
+
+    expect(result.text).toBe("alpha exact\nreplacement");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
+  });
+
+  it("throws ambiguous when smart candidates trade off stronger rows", () => {
+    expect(() =>
+      applyPatchToText(
+        "first target\nxx second target yy\nfirst target plus\nsecond target",
+        patch("-~first target", "-~second target")
+      )
+    ).toThrow(AmbiguousHunkError);
+  });
+
+  it("uses whole-hunk dominance to choose the unique smart candidate", () => {
+    const result = applyPatchToText(
+      "first target\nxx second target yy\nxx first target yy\nxx second target yy",
+      patch("-~first target", "-~second target", "+replacement")
+    );
+
+    expect(result.text).toBe("replacement\nxx first target yy\nxx second target yy");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
+  });
+
+  it("tries smart prefix and suffix as one ambiguity tier", () => {
+    expect(() => applyPatchToText("alpha target x\nx alpha target", patch("-~alpha target"))).toThrow(AmbiguousHunkError);
+
+    const prefixResult = applyPatchToText("alpha target x", patch("-~alpha target"));
+    expect(prefixResult.text).toBe("");
+    expect(prefixResult.hunkAudits[0].matcherKinds).toEqual(["prefix"]);
+
+    const suffixResult = applyPatchToText("x alpha target", patch("-~alpha target"));
+    expect(suffixResult.text).toBe("");
+    expect(suffixResult.hunkAudits[0].matcherKinds).toEqual(["suffix"]);
+  });
+
+  it("tries smart contains after prefix/suffix and reports hunk-level ambiguity", () => {
+    const result = applyPatchToText("x old value y", patch("-~old value"));
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["contains"]);
+    expect(() => applyPatchToText("x old value y\nz old value q", patch("-~old value"))).toThrow(AmbiguousHunkError);
+  });
+
+  it("tries smart whitespace token subsequence last", () => {
+    const result = applyPatchToText("alpha keep middle target", patch("-~alpha target"));
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["subsequence"]);
+  });
+
+  it("uses fixed locators and sparse ranges with smart hunk matching", () => {
+    const constrained = applyPatchToText("unique\ntarget one\nother\ntarget two", patch(" :unique", "-~target", "+replacement"));
+    expect(constrained.text).toBe("unique\nreplacement\nother\ntarget two");
+    expect(constrained.hunkAudits[0].matcherKinds).toEqual(["exact", "prefix"]);
+
+    const sparse = applyPatchToText("start marker\nremove\nend marker", patch(" ~start", "-...", " ~end"));
+    expect(sparse.text).toBe("start marker\nend marker");
+    expect(sparse.hunkAudits[0].matcherKinds).toEqual(["prefix", "range", "prefix"]);
+  });
+
+  it("guards broad smart tiers and reports stale when no tier is useful", () => {
+    expect(() => applyPatchToText("xx", patch("-~x"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("a b", patch("-~ab"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("--- x ---", patch("-~--- ---"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("alpha middle beta", patch("-~alpha beta"))).not.toThrow();
+  });
+
+  it("keeps smart insert rows as literal inserted content", () => {
+    const result = applyPatchToText("anchor", patch(" ~anchor", "+~literal"));
+
+    expect(result.text).toBe("anchor\n~literal");
+    expect(result.hunkTranscripts[0].lines).toContainEqual({ kind: "insert", content: "~literal" });
+  });
+
 });

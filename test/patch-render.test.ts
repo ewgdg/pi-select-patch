@@ -98,6 +98,7 @@ describe("patch renderer helpers", () => {
       prefix: 1,
       contains: 1,
       suffix: 1,
+      subsequence: 0,
       hash: 1,
       combined: 1,
       range: 2,
@@ -113,14 +114,14 @@ describe("patch renderer helpers", () => {
           audit: {
             hunkAudits: [
               { matcherKinds: ["unifiedDiff", "unifiedDiff"], matchPattern: [" :^literal", "-:#abc"] },
-              { matcherKinds: ["prefix"], matchPattern: [" ^prefix"] }
+              { matcherKinds: ["prefix", "subsequence"], matchPattern: [" ^prefix", " ~alpha beta"] }
             ]
           }
         }
       ]
     };
 
-    expect(getPatchMatcherStats(details)).toMatchObject({ exact: 0, prefix: 1, unifiedDiff: 2, total: 3 });
+    expect(getPatchMatcherStats(details)).toMatchObject({ exact: 0, prefix: 1, subsequence: 1, unifiedDiff: 2, total: 4 });
 
     const rendered = buildPatchResultRenderText({
       details: { ...details, diff: "--- a/file\n+++ b/file\n-old\n+new" },
@@ -129,7 +130,7 @@ describe("patch renderer helpers", () => {
       isError: false,
       theme
     });
-    expect(rendered).toContain("<muted>Matchers: prefix 1 / unified-diff 2</muted>");
+    expect(rendered).toContain("<muted>Matchers: prefix 1 / subsequence 1 / unified-diff 2</muted>");
   });
 
   it("reads and renders patch char efficiency from result details", () => {

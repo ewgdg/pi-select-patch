@@ -86,10 +86,13 @@ Locators:
 - `*<needle>` line contains text.
 - `$<suffix>` line ends with suffix.
 - `?{...}` combined JSON locator with `prefix`, `contains`, and/or `suffix`.
+- `~<text>` opt-in smart text locator for context/delete rows.
 - `...` range between surrounding matchers: ` ...` preserves, `-...` deletes.
 
 Hash prefix locator `#<hash>` is preferred in hash mode when `read` supplies a visible hash. In default mode, prefer text locators; use hash locators only for hashes already known from prior receipts or other trusted context. Use text locators when a line has no visible hash or when content predicates are clearer.
-Context locator rows may start with a literal space, or omit it. For example, `^prefix` is equivalent to ` ^prefix`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
+Context locator rows may start with a literal space, or omit it. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
+
+Smart `~` locators are explicit only: ` ~target text` or `~target text` for context, `-~old text` for delete. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, then whitespace token-subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Broad prefix/suffix/contains matches require useful nonblank alphanumeric text; token-subsequence also needs at least two query tokens.
 
 Malformed unified-diff rows are tolerated per matcher. A context/delete row without a locator marker treats text after ` ` or `-` as exact line content; bare unified-diff context text without leading space is invalid. Locator matching runs once; zero matches are stale and multiple matches are ambiguous. Within one `*** Update File` section, later hunks may match or span only untouched original target lines. They cannot anchor on or range across lines inserted or already used by earlier hunks in the same section. Use a later `*** Update File` section when a second edit must depend on prior output.
 

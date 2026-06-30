@@ -22,6 +22,7 @@ export interface PatchMatcherStats {
   prefix: number;
   contains: number;
   suffix: number;
+  subsequence: number;
   hash: number;
   combined: number;
   range: number;
@@ -246,7 +247,7 @@ export function buildPatchResultRenderText(options: {
 }
 
 function createEmptyPatchMatcherStats(): PatchMatcherStats {
-  return { exact: 0, prefix: 0, contains: 0, suffix: 0, hash: 0, combined: 0, range: 0, unifiedDiff: 0, total: 0 };
+  return { exact: 0, prefix: 0, contains: 0, suffix: 0, subsequence: 0, hash: 0, combined: 0, range: 0, unifiedDiff: 0, total: 0 };
 }
 
 function incrementPatchMatcherKind(stats: PatchMatcherStats, matcherKind: string): void {
@@ -254,6 +255,7 @@ function incrementPatchMatcherKind(stats: PatchMatcherStats, matcherKind: string
   else if (matcherKind === "prefix") stats.prefix += 1;
   else if (matcherKind === "contains") stats.contains += 1;
   else if (matcherKind === "suffix") stats.suffix += 1;
+  else if (matcherKind === "subsequence") stats.subsequence += 1;
   else if (matcherKind === "hash") stats.hash += 1;
   else if (matcherKind === "combined") stats.combined += 1;
   else if (matcherKind === "range") stats.range += 1;
@@ -274,6 +276,8 @@ function incrementPatchMatcherStats(stats: PatchMatcherStats, matchPattern: stri
     stats.contains += 1;
   } else if (selector.startsWith("$")) {
     stats.suffix += 1;
+  } else if (selector.startsWith("~")) {
+    stats.exact += 1;
   } else if (selector.startsWith("#")) {
     stats.hash += 1;
   } else if (selector.startsWith("?")) {
@@ -294,6 +298,7 @@ function formatPatchMatcherStatsFooter(stats: PatchMatcherStats, theme: PatchRen
     ["prefix", stats.prefix],
     ["contains", stats.contains],
     ["suffix", stats.suffix],
+    ["subsequence", stats.subsequence],
     ["hash", stats.hash],
     ["combined", stats.combined],
     ["range", stats.range],

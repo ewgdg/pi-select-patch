@@ -22,6 +22,7 @@ export interface MatchPatchOp {
   textSelector?: TextSelectorKind;
   combinedSelector?: CombinedTextSelector;
   unifiedDiff?: boolean;
+  smart?: boolean;
   inputLine?: number;
   authoredCharCount?: number;
 }
@@ -169,7 +170,7 @@ function hasOmittedContextOperator(line: string): boolean {
 }
 
 function hasLocatorMarker(selector: string): boolean {
-  return selector === "..." || selector.startsWith(":") || selector.startsWith("#") || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$");
+  return selector === "..." || selector.startsWith(":") || selector.startsWith("#") || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$") || selector.startsWith("~");
 }
 
 function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
@@ -215,6 +216,9 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
   if (selector.startsWith(":")) {
     return { kind, content: selector.slice(1), textSelector: "exact", inputLine, authoredCharCount: line.length };
   }
+  if (selector.startsWith("~")) {
+    return parseSmartPatchOp(kind, selector.slice(1), line, inputLine);
+  }
   if (selector.startsWith("#")) {
     return parseHashPatchOp(kind, selector.slice(1), line, inputLine);
   }
@@ -235,6 +239,12 @@ function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: st
 }
 
 
+function parseSmartPatchOp(kind: MatchPatchOpKind, content: string, _line: string, inputLine: number): MatchPatchOp {
+  if (content.length === 0) {
+    throw new InvalidPatchError(`Malformed ${kind} smart locator. Expected non-empty text after ~.`, { inputLine });
+  }
+  return { kind, content, textSelector: "exact", smart: true, inputLine, authoredCharCount: _line.length };
+}
 
 function throwRawTextSelectorError(kind: MatchPatchOpKind, _selector: string, _line: string, inputLine: number): never {
   throw new InvalidPatchError(`Raw ${kind} row. Add a locator marker.`, { inputLine });

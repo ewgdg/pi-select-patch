@@ -218,4 +218,30 @@ describe("universal patch parser", () => {
       }
     ])).toThrow("requires at least one");
   });
+
+  it("round-trips smart locators in universal patch serialization", () => {
+    const source = [
+      "*** Begin Patch",
+      "*** Update File: existing.txt",
+      "@@",
+      " ~smart context",
+      "-~smart delete",
+      "+~literal insert",
+      "*** End Patch"
+    ].join("\n");
+
+    const serialized = serializeUniversalPatch(parseUniversalPatch(source).operations);
+
+    expect(serialized).toBe(source);
+    const [operation] = parseUniversalPatch(serialized).operations;
+    expect(operation).toMatchObject({
+      kind: "update",
+      patch: { hunks: [{ ops: [
+        { kind: "context", content: "smart context", smart: true },
+        { kind: "delete", content: "smart delete", smart: true },
+        { kind: "insert", content: "~literal insert" }
+      ] }] }
+    });
+  });
+
 });

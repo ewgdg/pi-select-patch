@@ -120,6 +120,12 @@ function serializeTextSelector(op: Patch["hunks"][number]["ops"][number]): strin
     const combinedSelector = normalizeCombinedTextSelector(op.combinedSelector, "Combined selector");
     return `${op.kind === "context" ? " ?" : "-?"}${JSON.stringify(combinedSelector)}`;
   }
+  if (op.smart === true) {
+    if (op.content === undefined || op.content.length === 0) {
+      throw new InvalidPatchError("Smart locators require non-empty text content.");
+    }
+    return `${op.kind === "context" ? " ~" : "-~"}${op.content}`;
+  }
   if (op.textSelector === "prefix") return `${op.kind === "context" ? " ^" : "-^"}${op.content ?? ""}`;
   if (op.textSelector === "contains") return `${op.kind === "context" ? " *" : "-*"}${op.content ?? ""}`;
   if (op.textSelector === "suffix") return `${op.kind === "context" ? " $" : "-$"}${op.content ?? ""}`;
