@@ -231,7 +231,7 @@ describe("patch renderer helpers", () => {
         "[E_STALE_HUNK] Could not find hunk match.",
         "Skipped:",
         "(none)",
-        "Retry patch: /tmp/pi-selector-patch-abc/retry.patch"
+        "Retry patch: /tmp/pi-select-patch-abc/retry.patch"
       ].join("\n"),
       details: undefined,
       expanded: false,
@@ -242,7 +242,7 @@ describe("patch renderer helpers", () => {
     });
 
     expect(rendered).toContain("Failed:\n*** Update File: src/file.ts\n[E_STALE_HUNK] Could not find hunk match.");
-    expect(rendered).toContain("Retry patch: /tmp/pi-selector-patch-abc/retry.patch");
+    expect(rendered).toContain("Retry patch: /tmp/pi-select-patch-abc/retry.patch");
     expect(rendered.indexOf("Failed:")).toBeLessThan(rendered.indexOf("Agent input preview"));
     expect(rendered).not.toContain("Applied:\n(none)");
     expect(rendered).not.toContain("Skipped:\n(none)");

@@ -2,15 +2,15 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import piSelectorPatch from "../src/index.js";
+import piSelectPatch from "../src/index.js";
 import { patchTool } from "../src/tools/selector-patch.js";
 
 describe("extension registration", () => {
   it("keeps built-in read by default while hiding read_hash/write/edit", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
-    process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-selector-patch-agent-"));
-    delete process.env.PI_SELECTOR_PATCH_PROFILE;
+    const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
+    process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
+    delete process.env.PI_SELECT_PATCH_PROFILE;
     try {
       const registeredTools: string[] = [];
       let sessionStart:
@@ -23,7 +23,7 @@ describe("extension registration", () => {
         "selector_patch",
       ];
 
-      piSelectorPatch({
+      piSelectPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -65,20 +65,20 @@ describe("extension registration", () => {
       expect(activeTools).not.toContain("selector_patch");
     } finally {
       restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
-      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
   });
 
   it("uses smart profile defaults without replacing read", async () => {
-    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
-    process.env.PI_SELECTOR_PATCH_PROFILE = "smart";
+    const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
+    process.env.PI_SELECT_PATCH_PROFILE = "smart";
     try {
       const registeredTools: string[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
-      piSelectorPatch({
+      piSelectPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -113,20 +113,20 @@ describe("extension registration", () => {
       expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
       expect(patchParameterNames()).not.toContain("markerless_selector");
     } finally {
-      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
   });
 
   it("registers the hash reader as read when hash profile is enabled", async () => {
-    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
-    process.env.PI_SELECTOR_PATCH_PROFILE = "hash";
+    const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
+    process.env.PI_SELECT_PATCH_PROFILE = "hash";
     try {
       const registeredTools: string[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
-      piSelectorPatch({
+      piSelectPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -161,7 +161,7 @@ describe("extension registration", () => {
       expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
       expect(patchParameterNames()).not.toContain("markerless_selector");
     } finally {
-      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
   });
 });

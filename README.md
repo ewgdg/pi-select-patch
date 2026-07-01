@@ -1,4 +1,4 @@
-# pi-selector-patch
+# pi-select-patch
 
 Pi extension for token-efficient file edits using explicit selector patches.
 
@@ -12,7 +12,7 @@ On session start, the extension removes mutable built-in tools (`edit`, `write`)
 
 Profiles control session defaults and read registration. `classic` keeps built-in `read` and exact/status patch defaults. `smart` keeps built-in `read` and makes unified-diff selector text smart by default. `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
 
-Enable in `~/.pi/agent/extensions/pi-selector-patch/config.json`:
+Enable in `~/.pi/agent/extensions/pi-select-patch/config.json`:
 
 ```json
 {
@@ -23,8 +23,8 @@ Enable in `~/.pi/agent/extensions/pi-selector-patch/config.json`:
 Quick switch for testing:
 
 ```bash
-PI_SELECTOR_PATCH_PROFILE=smart pi   # force smart patch defaults
-PI_SELECTOR_PATCH_PROFILE=hash pi    # force hash-line read and hash patch defaults
+PI_SELECT_PATCH_PROFILE=smart pi   # force smart patch defaults
+PI_SELECT_PATCH_PROFILE=hash pi    # force hash-line read and hash patch defaults
 ```
 
 ## `patch`

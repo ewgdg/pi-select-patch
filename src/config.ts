@@ -8,10 +8,10 @@ export interface SelectorPatchConfig {
 
 export type SelectorPatchProfile = "classic" | "smart" | "hash";
 
-const ENV_PROFILE = "PI_SELECTOR_PATCH_PROFILE";
+const ENV_PROFILE = "PI_SELECT_PATCH_PROFILE";
 const EXTENSION_CONFIG_PATH = [
   "extensions",
-  "pi-selector-patch",
+  "pi-select-patch",
   "config.json",
 ] as const;
 

@@ -6,25 +6,25 @@ import { hashLine, parseText } from "../src/api.js";
 import { patchTool } from "../src/tools/selector-patch.js";
 
 async function makePlainTempDir() {
-  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
-  delete process.env.PI_SELECTOR_PATCH_PROFILE;
+  delete process.env.PI_SELECT_PATCH_PROFILE;
   return dir;
 }
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
+const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
 const previousTmpDir = process.env.TMPDIR;
 
 afterEach(() => {
   restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
-  restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
+  restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
   restoreEnv("TMPDIR", previousTmpDir);
 });
 
 async function makeTempDir() {
   const dir = await makePlainTempDir();
   const agentDir = join(dir, "agent");
-  const configDir = join(agentDir, "extensions", "pi-selector-patch");
+  const configDir = join(agentDir, "extensions", "pi-select-patch");
   await mkdir(configDir, { recursive: true });
   await writeFile(
     join(configDir, "config.json"),
@@ -317,7 +317,7 @@ describe("patch visible status", () => {
   it("uses configured smart profile as the patch default", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-selector-patch");
+    const configDir = join(agentDir, "extensions", "pi-select-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -359,7 +359,7 @@ describe("patch visible status", () => {
   it("does not allow per-call row-parsing override in hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-selector-patch");
+    const configDir = join(agentDir, "extensions", "pi-select-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -395,7 +395,7 @@ describe("patch visible status", () => {
   it("uses hash selectors and hash receipt with the configured hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-selector-patch");
+    const configDir = join(agentDir, "extensions", "pi-select-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -436,7 +436,7 @@ describe("patch visible status", () => {
   it("keeps smart unified-diff rows in retry patches for configured smart defaults", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-selector-patch");
+    const configDir = join(agentDir, "extensions", "pi-select-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -1044,7 +1044,7 @@ describe("patch visible status", () => {
     expect(message).toContain("[E_INVALID_PATCH]");
     expect(message).toContain("Retry patch:");
     const retryPatchPath = retryPatchPathFrom(message);
-    expect(dirname(retryPatchPath)).toBe(join(tmpdir(), "pi-selector-patch"));
+    expect(dirname(retryPatchPath)).toBe(join(tmpdir(), "pi-select-patch"));
     expect(basename(retryPatchPath)).toMatch(/^[0-9a-f-]+\.patch$/);
     await expect(readFile(retryPatchPath, "utf8")).resolves.toBe(
       patch,

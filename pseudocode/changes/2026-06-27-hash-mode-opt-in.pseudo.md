@@ -9,13 +9,13 @@ affects:
 
 ## Intent
 
-Allow selector-patch to switch into all-in hash profile by profile config or environment override while keeping the existing compact-status behavior as the default.
+Allow select-patch to switch into all-in hash profile by profile config or environment override while keeping the existing compact-status behavior as the default.
 
 ## Behavior
 
 ```pseudo
 on session start:
-  read profile from extension config.json, overridden by PI_SELECTOR_PATCH_PROFILE when present
+  read profile from extension config.json, overridden by PI_SELECT_PATCH_PROFILE when present
   ignore project-local configuration for hash profile
   active tools := current active tools without edit, write, selector_read, selector_patch
   if profile is hash:

@@ -6,7 +6,7 @@ import {
 } from "./tools/selector-patch.js";
 import { hashProfileReadTool } from "./tools/selector-read.js";
 
-export default function piSelectorPatch(pi: ExtensionAPI): void {
+export default function piSelectPatch(pi: ExtensionAPI): void {
   pi.registerTool(patchTool);
 
   pi.on("session_start", async (_event, ctx) => {

@@ -5,18 +5,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readSelectorPatchConfig } from "../src/config.js";
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
+const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
 
 afterEach(() => {
   restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
-  restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
+  restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
 });
 
 async function makeAgentDir(config?: unknown) {
-  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-agent-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
   process.env.PI_CODING_AGENT_DIR = dir;
   if (config !== undefined) {
-    const configDir = join(dir, "extensions", "pi-selector-patch");
+    const configDir = join(dir, "extensions", "pi-select-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(join(configDir, "config.json"), JSON.stringify(config));
   }
@@ -28,7 +28,7 @@ function restoreEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 
-describe("selector patch config", () => {
+describe("select patch config", () => {
   it("reads profile from extension config.json", async () => {
     await makeAgentDir({ profile: "smart" });
 
@@ -38,7 +38,7 @@ describe("selector patch config", () => {
   });
 
   it("ignores project settings", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-selector-patch-project-"));
+    const cwd = await mkdtemp(join(tmpdir(), "pi-select-patch-project-"));
     await mkdir(join(cwd, ".pi"));
     await writeFile(
       join(cwd, ".pi", "settings.json"),
@@ -53,7 +53,7 @@ describe("selector patch config", () => {
 
   it("lets environment override global config", async () => {
     await makeAgentDir({ profile: "hash" });
-    process.env.PI_SELECTOR_PATCH_PROFILE = "smart";
+    process.env.PI_SELECT_PATCH_PROFILE = "smart";
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
       profile: "smart",

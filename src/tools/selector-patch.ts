@@ -328,7 +328,7 @@ const PATCH_PROFILE_DEFAULTS: Record<
 
 export const patchTool = defineTool({
   name: "patch",
-  label: "Selector Patch",
+  label: "Select Patch",
   description:
     "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
   promptSnippet:
@@ -772,7 +772,7 @@ async function writeRawRetryPatch(patchText: string): Promise<string> {
 }
 
 async function createRetryPatchPath(): Promise<string> {
-  const directory = join(tmpdir(), "pi-selector-patch");
+  const directory = join(tmpdir(), "pi-select-patch");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return join(directory, `${randomUUID()}.patch`);
 }

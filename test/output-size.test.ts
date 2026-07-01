@@ -12,9 +12,9 @@ import { patchTool } from "../src/tools/selector-patch.js";
 import { readHashTool } from "../src/tools/selector-read.js";
 
 const makeTempDir = async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
-  delete process.env.PI_SELECTOR_PATCH_PROFILE;
+  delete process.env.PI_SELECT_PATCH_PROFILE;
   return dir;
 };
 const row = (prefix: " " | "-" | "+", content: string) =>
