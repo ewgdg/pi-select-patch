@@ -131,7 +131,7 @@ function buildPatchHunkMatchDescription(profile: LocatorPatchProfile): string {
       ### Hunk Match: Hash Profile
       Context/delete rows identify lines by hash.
       Copy only the 1- to 4-character hash from \`HASH│content\` read output, not the separator or content.
-      Use \`<hash>\` or \` <hash>\` for context and \`-<hash>\` for deletes.
+      Use \`<hash>\` for context and \`-<hash>\` for deletes.
       Use only the hash characters from read output; omit \`#\`.
       Range rows are \`...\` for preserved/skipped context and \`-...\` for deleted ranges.
     `);
@@ -146,7 +146,7 @@ function buildPatchHunkMatchDescription(profile: LocatorPatchProfile): string {
     - \`$<suffix>\`: suffix match
     - \`*<text>\`: contains match
     - \`~<text>\`: smart match
-    - \`#<hash>\`: hash match when hash locators are enabled by \`receipt: "hash"\` or hash profile
+    - \`#<hash>\`: hash match when hash locators are enabled by \`receipt: "hash"\`
     - \`?<json-obj>\`: combined locator with \`prefix\`, \`contains\`, and/or \`suffix\`
     - \`...\`: range row; use \`...\` for context range and \`-...\` for delete range
     If no locator marker follows the operator, classic profile uses exact unified-diff matching: \` text\` is exact context and \`-text\` is exact delete. Bare exact context text without leading space is invalid.
@@ -379,6 +379,7 @@ export const patchTool = defineTool({
       } catch (error) {
         const retryPatchPath = await writeRetryPatch(
           universalPatch.operations.slice(index),
+          executionOptions.parseOptions,
         );
         const partialError = new PartialPatchError(
           renderSequentialFailureMessage({
@@ -483,7 +484,7 @@ function buildPatchPromptGuidelines(profile: LocatorPatchProfile): string[] {
     );
   } else {
     guidelines.push(
-      "Patch tool classic profile active: context/delete rows without locator markers use exact unified-diff behavior; hash locators and hash receipts require `receipt: \"hash\"` or hash profile.",
+      "Patch tool classic profile active: context/delete rows without locator markers use exact unified-diff behavior; hash locators and hash receipts require `receipt: \"hash\"`.",
     );
   }
   guidelines.push(
@@ -506,7 +507,7 @@ function resolvePatchExecutionOptions(
     parseOptions: {
       profile: config.profile,
       strictHashRows: config.profile === "hash",
-      hashLocatorsEnabled: config.profile === "hash" || receipt === "hash",
+      hashLocatorsEnabled: receipt === "hash",
     },
     receipt,
   };
@@ -740,10 +741,11 @@ function updateDryRunFileState(
 
 async function writeRetryPatch(
   operations: readonly UniversalPatchOperation[],
+  parseOptions: ParsePatchOptions,
 ): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "pi-locator-patch-"));
   const retryPatchPath = join(directory, "retry.patch");
-  await writeRawFile(retryPatchPath, serializeUniversalPatch(operations), {
+  await writeRawFile(retryPatchPath, serializeUniversalPatch(operations, parseOptions), {
     encoding: "utf8",
     mode: 0o600,
     flag: "wx",

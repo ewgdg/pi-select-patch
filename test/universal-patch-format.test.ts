@@ -149,6 +149,33 @@ describe("universal patch parser", () => {
     expect(parseUniversalPatch(serialized).operations.map((operation) => operation.kind)).toEqual(["add", "update", "delete"]);
   });
 
+  it("serializes hash profile retry patches without context or hash markers", () => {
+    const hash = hashLine("old").slice(0, 3);
+    const serialized = serializeUniversalPatch([
+      {
+        kind: "update",
+        path: "existing.txt",
+        patch: { hunks: [{ ops: [{ kind: "context", hash }, { kind: "range", rangeKind: "context" }, { kind: "delete", hash }, { kind: "range", rangeKind: "delete" }] }] }
+      }
+    ], { profile: "hash" });
+
+    expect(serialized).toContain(`@@\n${hash}\n...\n-${hash}\n-...`);
+    expect(parseUniversalPatch(serialized, undefined, { profile: "hash" }).operations[0]).toMatchObject({ kind: "update" });
+  });
+
+  it("serializes smart profile retry patches without locator markers", () => {
+    const serialized = serializeUniversalPatch([
+      {
+        kind: "update",
+        path: "existing.txt",
+        patch: { hunks: [{ ops: [{ kind: "context", content: "target", smart: true }, { kind: "range", rangeKind: "context" }, { kind: "delete", content: "old", smart: true }, { kind: "range", rangeKind: "delete" }] }] }
+      }
+    ], { profile: "smart" });
+
+    expect(serialized).toContain("@@\ntarget\n...\n-old\n-...");
+    expect(parseUniversalPatch(serialized, undefined, { profile: "smart" }).operations[0]).toMatchObject({ kind: "update" });
+  });
+
   it("accepts leading-space context rows inside universal patches", () => {
     const source = [
       "*** Begin Patch",

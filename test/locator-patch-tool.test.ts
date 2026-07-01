@@ -38,6 +38,8 @@ function restoreEnv(name: string, value: string | undefined): void {
 }
 const row = (prefix: " " | "-" | "+", content: string) =>
   prefix === "+" ? `${prefix}${content}` : `${prefix}#${hashLine(content)}`;
+const hashProfileRow = (prefix: " " | "-" | "+", content: string) =>
+  prefix === "+" ? `${prefix}${content}` : prefix === "-" ? `-${hashLine(content)}` : hashLine(content);
 const hashContext = (content: string) => ` ${hashLine(content)}`;
 const resultText = (result: Awaited<ReturnType<typeof patchTool.execute>>) => {
   const content = result.content[0];
@@ -123,8 +125,8 @@ describe("patch visible status", () => {
         patch: [
           "*** Update File: file.txt",
           "@@",
-          row("-", "old"),
-          row("+", "new"),
+          hashProfileRow("-", "old"),
+          hashProfileRow("+", "new"),
         ].join("\n"),
         receipt: "hash",
       },
@@ -258,7 +260,7 @@ describe("patch visible status", () => {
     ).rejects.toThrow("[E_INVALID_PATCH]");
   });
 
-  it("keeps hash locators and malformed hash errors in hash profile", async () => {
+  it("uses markerless hashes and malformed hash errors in hash profile", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
@@ -266,8 +268,8 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** End Patch",
     ].join("\n");
 
@@ -417,7 +419,7 @@ describe("patch visible status", () => {
     await expect(readFile(file, "utf8")).resolves.toBe("new");
   });
 
-  it("writes explicit locators into retry patches for configured markerless defaults", async () => {
+  it("keeps markerless smart rows in retry patches for configured markerless defaults", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
     const configDir = join(agentDir, "extensions", "pi-locator-patch");
@@ -454,7 +456,7 @@ describe("patch visible status", () => {
         "*** Begin Patch",
         "*** Update File: b.txt",
         "@@",
-        "-~missing",
+        "-missing",
         "+done",
         "*** End Patch",
       ].join("\n"),
@@ -824,12 +826,12 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: a.txt",
       "@@",
-      row("-", "old"),
-      row("+", "first"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "first"),
       "*** Update File: ./a.txt",
       "@@",
-      row("-", "old"),
-      row("+", "second"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "second"),
       "*** End Patch",
     ].join("\n");
 
@@ -876,12 +878,12 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: a.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** Update File: a.txt",
       "@@",
-      row("-", "absent"),
-      row("+", "replacement"),
+      hashProfileRow("-", "absent"),
+      hashProfileRow("+", "replacement"),
       "*** End Patch",
     ].join("\n");
 
@@ -892,6 +894,9 @@ describe("patch visible status", () => {
     );
     expect(message).toContain("[E_STALE_HUNK] Line 8: Hunk not found.");
     expect(message).not.toContain("Hunk 1 not found");
+    const retryPatch = await readFile(retryPatchPathFrom(message), "utf8");
+    expect(retryPatch).toContain(`-${hashLine("absent")}`);
+    expect(retryPatch).not.toContain("-#");
   });
 
   it("keeps earlier aliased Delete File success and writes failed-tail retry patch", async () => {
@@ -925,8 +930,8 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: one.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** Add File: missing-parent/two.txt",
       "+second",
       "*** End Patch",
@@ -1000,8 +1005,8 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: one.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** Add File: missing-parent/two.txt",
       "+second",
       "*** End Patch",
@@ -1027,8 +1032,8 @@ describe("patch visible status", () => {
       "+first",
       "*** Update File: ./a.txt",
       "@@",
-      row("-", "first"),
-      row("+", "second"),
+      hashProfileRow("-", "first"),
+      hashProfileRow("+", "second"),
       "*** End Patch",
     ].join("\n");
 
@@ -1052,12 +1057,12 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: one.txt",
       "@@",
-      row(" ", "first"),
-      row("+", "second"),
+      hashProfileRow(" ", "first"),
+      hashProfileRow("+", "second"),
       "*** Update File: one.txt",
       "@@",
-      row(" ", "second"),
-      row("+", "third"),
+      hashProfileRow(" ", "second"),
+      hashProfileRow("+", "third"),
       "*** End Patch",
     ].join("\n");
 
@@ -1077,8 +1082,8 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: one.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** Add File: two.txt",
       "+second",
       "*** End Patch",
@@ -1107,8 +1112,8 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: one.txt",
       "@@",
-      row("-", "old"),
-      row("+", "new"),
+      hashProfileRow("-", "old"),
+      hashProfileRow("+", "new"),
       "*** End Patch",
     ].join("\n");
     const patchPath = join(dir, "change.patch");

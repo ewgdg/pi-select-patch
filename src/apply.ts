@@ -328,9 +328,10 @@ function textSelectorMatches(content: string, op: MatchPatchOp): boolean {
 
 function bestSmartMatcherKind(query: string, targetLine: string): SmartMatcherKind | undefined {
   if (targetLine === query) return "exact";
-  if (query.length > 0 && targetLine.startsWith(query)) return "prefix";
-  if (query.length > 0 && targetLine.endsWith(query)) return "suffix";
-  if (query.length > 0 && targetLine.includes(query)) return "contains";
+  if (query.length < 1) return undefined;
+  if (targetLine.startsWith(query)) return "prefix";
+  if (targetLine.endsWith(query)) return "suffix";
+  if (targetLine.includes(query)) return "contains";
   if (smartTokenSubsequenceMatches(targetLine, query)) return "subsequence";
   return undefined;
 }

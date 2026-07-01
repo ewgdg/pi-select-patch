@@ -220,6 +220,16 @@ describe("patch parser", () => {
     ]);
   });
 
+  it("preserves leading spaces and marker-looking text in smart profile context rows", () => {
+    const parsed = parsePatch(["@@", "  target text", " ~explicit smart", "-~delete text"].join("\n"), undefined, 0, { profile: "smart" });
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "  target text", textSelector: "exact", smart: true },
+      { kind: "context", content: " ~explicit smart", textSelector: "exact", smart: true },
+      { kind: "delete", content: "~delete text", textSelector: "exact", smart: true }
+    ]);
+  });
+
   it("parses blank smart locator rows", () => {
     expect(parsePatch(["@@", "before", "-", "after"].join("\n"), undefined, 0, { profile: "smart" }).hunks[0].ops).toMatchObject([
       { kind: "context", content: "before", textSelector: "exact", smart: true },
@@ -241,6 +251,14 @@ describe("patch parser", () => {
     ]);
   });
 
+  it("rejects context and hash locator markers in the hash profile", () => {
+    const hash = hashLine("old").slice(0, 3);
+
+    expect(() => parsePatch(`@@\n ${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed context hash locator");
+    expect(() => parsePatch(`@@\n#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed context hash locator");
+    expect(() => parsePatch(`@@\n-#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed delete hash locator");
+  });
+
   it("keeps classic default behavior and rejects malformed hash profile rows", () => {
     expect(() => parsePatch("@@\ncontext")).toThrow("[E_INVALID_PATCH]");
     expect(() => parsePatch("@@\nnot-a-hash", undefined, 0, { profile: "hash" })).toThrow("Malformed context hash locator");
@@ -248,7 +266,7 @@ describe("patch parser", () => {
 
   it("allows only hash, range, and insert rows in strict hash mode", () => {
     const hash = hashLine("old").slice(0, 3);
-    const parsed = parsePatch(`@@\n#${hash}\n-${hash}\n...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
+    const parsed = parsePatch(`@@\n${hash}\n-${hash}\n...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", hash },

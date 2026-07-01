@@ -145,14 +145,21 @@ function parseHunkOperationLines(opLines: readonly PatchOperationLine[], hashFn:
 }
 
 function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: number, options: NormalizedParsePatchOptions): PatchOp {
-  if (options.strictHashRows) {
-    return parseStrictHashRow(line, hashFn, inputLine);
-  }
-  if (line === "") {
-    return parseUnifiedDiffOp(line, hashFn, inputLine);
-  }
   if (line.startsWith("+")) {
     return parsePatchOp(line, hashFn, inputLine);
+  }
+  if (options.strictHashRows) {
+    return parseHashMarkerlessRow(line, inputLine);
+  }
+  if (options.profile === "smart") {
+    return parseSmartMarkerlessRow(line, inputLine);
+  }
+  return parseClassicMarkerfulRow(line, hashFn, inputLine, options.hashLocatorsEnabled);
+}
+
+function parseClassicMarkerfulRow(line: string, hashFn: HashFunction, inputLine: number, hashLocatorsEnabled: boolean): PatchOp {
+  if (line === "") {
+    return parseUnifiedDiffOp(line, hashFn, inputLine);
   }
   if (line.startsWith(" ") || line.startsWith("-")) {
     const kind: MatchPatchOpKind = line.startsWith("-") ? "delete" : "context";
@@ -160,42 +167,38 @@ function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: n
     if (kind === "context" && selector === "") {
       return parseSelectorPatchOp(kind, selector, line, inputLine);
     }
-    if (hasLocatorMarker(selector, options.hashLocatorsEnabled)) {
-      return parseSelectorPatchOp(kind, selector, line, inputLine);
-    }
-    if (options.profile === "classic") {
-      return parseUnifiedDiffOp(line, hashFn, inputLine);
-    }
-    return parseSmartPatchOp(kind, selector, line, inputLine);
+    return hasLocatorMarker(selector, hashLocatorsEnabled) ? parseSelectorPatchOp(kind, selector, line, inputLine) : parseUnifiedDiffOp(line, hashFn, inputLine);
   }
-  if (hasLocatorMarker(line, options.hashLocatorsEnabled)) {
+  if (hasLocatorMarker(line, hashLocatorsEnabled)) {
     return parseSelectorPatchOp("context", line, line, inputLine);
-  }
-  if (options.profile === "smart") {
-    return parseSmartPatchOp("context", line, line, inputLine);
   }
   return parsePatchOp(line, hashFn, inputLine);
 }
 
-function parseStrictHashRow(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
-  if (line.startsWith("+")) {
-    return parsePatchOp(line, hashFn, inputLine);
+function parseSmartMarkerlessRow(line: string, inputLine: number): PatchOp {
+  if (line === "...") {
+    return { kind: "range", rangeKind: "context", inputLine, authoredCharCount: line.length };
   }
   if (line.startsWith("-")) {
-    return parseStrictHashMatchOrRange("delete", line.slice(1), line, inputLine);
+    const selector = line.slice(1);
+    if (selector === "...") {
+      return { kind: "range", rangeKind: "delete", inputLine, authoredCharCount: line.length };
+    }
+    return parseSmartPatchOp("delete", selector, line, inputLine);
   }
-  if (line.startsWith(" ")) {
-    return parseStrictHashMatchOrRange("context", line.slice(1), line, inputLine);
-  }
-  return parseStrictHashMatchOrRange("context", line, line, inputLine);
+  return parseSmartPatchOp("context", line, line, inputLine);
 }
 
-function parseStrictHashMatchOrRange(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {
+function parseHashMarkerlessRow(line: string, inputLine: number): PatchOp {
+  if (line.startsWith("-")) {
+    return parseHashMarkerlessMatchOrRange("delete", line.slice(1), line, inputLine);
+  }
+  return parseHashMarkerlessMatchOrRange("context", line, line, inputLine);
+}
+
+function parseHashMarkerlessMatchOrRange(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {
   if (selector === "...") {
     return { kind: "range", rangeKind: kind, inputLine, authoredCharCount: line.length };
-  }
-  if (selector.startsWith("#")) {
-    return parseHashPatchOp(kind, selector.slice(1), line, inputLine);
   }
   return parseHashPatchOp(kind, selector, line, inputLine);
 }
