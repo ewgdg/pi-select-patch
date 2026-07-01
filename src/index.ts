@@ -1,21 +1,21 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { readLocatorPatchConfig } from "./config.js";
+import { readSelectorPatchConfig } from "./config.js";
 import {
   patchTool,
   setPatchToolProfileGuideline,
-} from "./tools/locator-patch.js";
-import { hashProfileReadTool } from "./tools/locator-read.js";
+} from "./tools/selector-patch.js";
+import { hashProfileReadTool } from "./tools/selector-read.js";
 
-export default function piLocatorPatch(pi: ExtensionAPI): void {
+export default function piSelectorPatch(pi: ExtensionAPI): void {
   pi.registerTool(patchTool);
 
   pi.on("session_start", async (_event, ctx) => {
     const activeTools = pi.getActiveTools();
-    const { profile } = await readLocatorPatchConfig();
+    const { profile } = await readSelectorPatchConfig();
     if (profile === "hash") {
       pi.registerTool(hashProfileReadTool);
     }
-    const requiredLocatorTools =
+    const requiredSelectorTools =
       profile === "hash" ? [hashProfileReadTool.name, "patch"] : ["patch"];
     setPatchToolProfileGuideline(profile);
     const withoutConflictingTools = activeTools.filter(
@@ -23,11 +23,11 @@ export default function piLocatorPatch(pi: ExtensionAPI): void {
         tool !== "read_hash" &&
         tool !== "edit" &&
         tool !== "write" &&
-        tool !== "locator_read" &&
-        tool !== "locator_patch",
+        tool !== "selector_read" &&
+        tool !== "selector_patch",
     );
     pi.setActiveTools([
-      ...new Set([...withoutConflictingTools, ...requiredLocatorTools]),
+      ...new Set([...withoutConflictingTools, ...requiredSelectorTools]),
     ]);
   });
 }

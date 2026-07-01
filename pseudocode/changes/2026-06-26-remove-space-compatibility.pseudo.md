@@ -14,9 +14,9 @@ Keep context rows explicit with a literal space operator. Do not support `=` as 
 ```pseudo
 When parsing an update hunk row:
   if row begins with '+': parse inserted content after '+'
-  if row begins with '-': parse delete locator after '-'
+  if row begins with '-': parse delete selector after '-'
   if row begins with space:
-    parse context locator after the leading space
+    parse context selector after the leading space
   otherwise:
     reject patch as malformed operation
 

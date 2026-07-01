@@ -151,10 +151,10 @@ function serializePatchOp(op: Patch["hunks"][number]["ops"][number], options: Se
   if (op.kind === "range") return rangePatchOp(op.rangeKind, options);
   if (op.kind === "insert") return `+${op.content}`;
   if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) {
-    throw new InvalidPatchError("Hash+text locators are not supported; serialize hash-only or text-only patch operations.");
+    throw new InvalidPatchError("Hash+text selectors are not supported; serialize hash-only or text-only patch operations.");
   }
   if (op.content !== undefined && op.combinedSelector !== undefined) {
-    throw new InvalidPatchError("Mixed text locators are not supported; serialize exactly one text locator form.");
+    throw new InvalidPatchError("Mixed text selectors are not supported; serialize exactly one text selector form.");
   }
   if (op.hash !== undefined) return `${hashPatchOpPrefix(op.kind, options)}${op.hash}`;
   return serializeTextSelector(op, options);
@@ -168,7 +168,7 @@ function serializeTextSelector(op: Patch["hunks"][number]["ops"][number], option
   }
   if (op.smart === true) {
     if (op.content === undefined) {
-      throw new InvalidPatchError("Smart locators require text content.", { inputLine: op.inputLine });
+      throw new InvalidPatchError("Smart selectors require text content.", { inputLine: op.inputLine });
     }
     if (usesSmartProfileRows(op, options)) return op.kind === "context" ? ` ${op.content}` : `-${op.content}`;
     return `${op.kind === "context" ? " ~" : "-~"}${op.content}`;

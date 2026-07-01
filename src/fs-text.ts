@@ -129,7 +129,7 @@ async function assertWritableDirectory(path: string): Promise<void> {
 }
 async function writeNewTextFileViaTemp(path: string, text: string): Promise<void> {
   const targetDirectory = dirname(path);
-  const tempPath = resolve(targetDirectory, `.locator-patch-${process.pid}-${randomUUID()}.tmp`);
+  const tempPath = resolve(targetDirectory, `.selector-patch-${process.pid}-${randomUUID()}.tmp`);
 
   try {
     await writeFile(tempPath, text, { encoding: "utf8", flag: "wx", mode: 0o666 });
@@ -145,7 +145,7 @@ async function writeNewTextFileViaTemp(path: string, text: string): Promise<void
 
 async function writeTextFileViaTemp(path: string, text: string, mode: number): Promise<void> {
   const targetDirectory = dirname(path);
-  const tempPath = resolve(targetDirectory, `.locator-patch-${process.pid}-${randomUUID()}.tmp`);
+  const tempPath = resolve(targetDirectory, `.selector-patch-${process.pid}-${randomUUID()}.tmp`);
 
   try {
     await writeFile(tempPath, text, { encoding: "utf8", flag: "wx", mode });

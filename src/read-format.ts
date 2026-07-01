@@ -22,12 +22,12 @@ export function renderHashLines(entries: readonly HashLineEntry[]): string {
 export function parseHashLine(text: string): HashLineEntry {
   const separatorIndex = text.indexOf(HASH_SEPARATOR);
   if (separatorIndex < 0) {
-    throw new InvalidPatchError("Malformed locator: missing separator.");
+    throw new InvalidPatchError("Malformed selector: missing separator.");
   }
 
   const hash = text.slice(0, separatorIndex);
   if (!isHash(hash)) {
-    throw new InvalidPatchError("Malformed locator: invalid 1- to 4-character base64url hash.");
+    throw new InvalidPatchError("Malformed selector: invalid 1- to 4-character base64url hash.");
   }
 
   return { hash, content: text.slice(separatorIndex + HASH_SEPARATOR.length) };

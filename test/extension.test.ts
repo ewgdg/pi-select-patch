@@ -2,15 +2,15 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import piLocatorPatch from "../src/index.js";
-import { patchTool } from "../src/tools/locator-patch.js";
+import piSelectorPatch from "../src/index.js";
+import { patchTool } from "../src/tools/selector-patch.js";
 
 describe("extension registration", () => {
   it("keeps built-in read by default while hiding read_hash/write/edit", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-    const previousProfile = process.env.PI_LOCATOR_PATCH_PROFILE;
-    process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-locator-patch-agent-"));
-    delete process.env.PI_LOCATOR_PATCH_PROFILE;
+    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
+    process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-selector-patch-agent-"));
+    delete process.env.PI_SELECTOR_PATCH_PROFILE;
     try {
       const registeredTools: string[] = [];
       let sessionStart:
@@ -19,11 +19,11 @@ describe("extension registration", () => {
         "read",
         "edit",
         "write",
-        "locator_read",
-        "locator_patch",
+        "selector_read",
+        "selector_patch",
       ];
 
-      piLocatorPatch({
+      piSelectorPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -58,27 +58,27 @@ describe("extension registration", () => {
         "classic profile active",
       );
       expect(patchParameterDescription()).toContain("Hunk Match: Classic Profile");
-      expect(patchParameterNames()).not.toContain("markerless_locator");
+      expect(patchParameterNames()).not.toContain("markerless_selector");
       expect(activeTools).not.toContain("write");
       expect(activeTools).not.toContain("edit");
-      expect(activeTools).not.toContain("locator_read");
-      expect(activeTools).not.toContain("locator_patch");
+      expect(activeTools).not.toContain("selector_read");
+      expect(activeTools).not.toContain("selector_patch");
     } finally {
       restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
-      restoreEnv("PI_LOCATOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
     }
   });
 
   it("uses smart profile defaults without replacing read", async () => {
-    const previousProfile = process.env.PI_LOCATOR_PATCH_PROFILE;
-    process.env.PI_LOCATOR_PATCH_PROFILE = "smart";
+    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
+    process.env.PI_SELECTOR_PATCH_PROFILE = "smart";
     try {
       const registeredTools: string[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
-      piLocatorPatch({
+      piSelectorPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -111,22 +111,22 @@ describe("extension registration", () => {
       );
       expect(patchParameterDescription()).toContain("Hunk Match: Smart Profile");
       expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames()).not.toContain("markerless_locator");
+      expect(patchParameterNames()).not.toContain("markerless_selector");
     } finally {
-      restoreEnv("PI_LOCATOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
     }
   });
 
   it("registers the hash reader as read when hash profile is enabled", async () => {
-    const previousProfile = process.env.PI_LOCATOR_PATCH_PROFILE;
-    process.env.PI_LOCATOR_PATCH_PROFILE = "hash";
+    const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
+    process.env.PI_SELECTOR_PATCH_PROFILE = "hash";
     try {
       const registeredTools: string[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
-      piLocatorPatch({
+      piSelectorPatch({
         registerTool(tool: { name: string }) {
           registeredTools.push(tool.name);
         },
@@ -159,9 +159,9 @@ describe("extension registration", () => {
       );
       expect(patchParameterDescription()).toContain("Hunk Match: Hash Profile");
       expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames()).not.toContain("markerless_locator");
+      expect(patchParameterNames()).not.toContain("markerless_selector");
     } finally {
-      restoreEnv("PI_LOCATOR_PATCH_PROFILE", previousProfile);
+      restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
     }
   });
 });

@@ -3,28 +3,28 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hashLine, parseText } from "../src/api.js";
-import { patchTool } from "../src/tools/locator-patch.js";
+import { patchTool } from "../src/tools/selector-patch.js";
 
 async function makePlainTempDir() {
-  const dir = await mkdtemp(join(tmpdir(), "pi-locator-patch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
-  delete process.env.PI_LOCATOR_PATCH_PROFILE;
+  delete process.env.PI_SELECTOR_PATCH_PROFILE;
   return dir;
 }
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-const previousProfile = process.env.PI_LOCATOR_PATCH_PROFILE;
+const previousProfile = process.env.PI_SELECTOR_PATCH_PROFILE;
 const previousTmpDir = process.env.TMPDIR;
 
 afterEach(() => {
   restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
-  restoreEnv("PI_LOCATOR_PATCH_PROFILE", previousProfile);
+  restoreEnv("PI_SELECTOR_PATCH_PROFILE", previousProfile);
   restoreEnv("TMPDIR", previousTmpDir);
 });
 
 async function makeTempDir() {
   const dir = await makePlainTempDir();
   const agentDir = join(dir, "agent");
-  const configDir = join(agentDir, "extensions", "pi-locator-patch");
+  const configDir = join(agentDir, "extensions", "pi-selector-patch");
   await mkdir(configDir, { recursive: true });
   await writeFile(
     join(configDir, "config.json"),
@@ -60,14 +60,14 @@ const detailsCharEfficiency = (
       charEfficiency: { patchChars: number; baselineChars: number };
     }
   ).charEfficiency;
-const detailsLocatorEfficiency = (
+const detailsSelectorEfficiency = (
   result: Awaited<ReturnType<typeof patchTool.execute>>,
 ) =>
   (
     result.details as {
-      locatorEfficiency: { patchChars: number; baselineChars: number };
+      selectorEfficiency: { patchChars: number; baselineChars: number };
     }
-  ).locatorEfficiency;
+  ).selectorEfficiency;
 const patchParameterDescription = () => {
   const parameters = patchTool.parameters as {
     properties: { patch: { description?: string } };
@@ -149,7 +149,7 @@ describe("patch visible status", () => {
     expect(description).toContain("<content>\naaaaaaaaaab\naaaaacaaaaa\nbbbbbbbbbba\n</content>");
     expect(description).toContain("@@\n :before\n :\n-:\n :after\n+\n</patch>");
     expect(description).not.toContain("<policy>");
-    expect(description).not.toContain("markerless_locator");
+    expect(description).not.toContain("markerless_selector");
   });
 
   it("keeps patch behavior policy in one prompt guideline chunk", () => {
@@ -159,11 +159,11 @@ describe("patch visible status", () => {
     expect(guideline).toContain("<patch_tool_policy>");
     expect(guideline).toContain("classic profile active");
     expect(guideline).toContain("Token efficiency is the highest priority");
-    expect(guideline).toContain("Use range locator whenever possible");
+    expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).toContain("</patch_tool_policy>");
   });
 
-  it("is agent-visible as a hash receipt with locator cost warning", async () => {
+  it("is agent-visible as a hash receipt with selector cost warning", async () => {
     const diff = [
       "@@",
       row(" ", "a"),
@@ -182,7 +182,7 @@ describe("patch visible status", () => {
         hashContext("a"),
         `+${hashLine("new")}`,
         hashContext("z"),
-        "Warning: locator cost is 225.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 225.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain(hashLine("old"));
@@ -215,7 +215,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 125.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
@@ -248,7 +248,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 104.2% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 104.2% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(
@@ -317,7 +317,7 @@ describe("patch visible status", () => {
   it("uses configured smart profile as the patch default", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-locator-patch");
+    const configDir = join(agentDir, "extensions", "pi-selector-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -348,7 +348,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 77.3% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 77.3% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(
@@ -359,7 +359,7 @@ describe("patch visible status", () => {
   it("does not allow per-call row-parsing override in hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-locator-patch");
+    const configDir = join(agentDir, "extensions", "pi-selector-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -395,7 +395,7 @@ describe("patch visible status", () => {
   it("uses hash selectors and hash receipt with the configured hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-locator-patch");
+    const configDir = join(agentDir, "extensions", "pi-selector-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -427,7 +427,7 @@ describe("patch visible status", () => {
         "*** Update File: file.txt",
         "@@ matched line 1 @@",
         `+${hashLine("new")}`,
-        "Warning: locator cost is 125.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
@@ -436,7 +436,7 @@ describe("patch visible status", () => {
   it("keeps smart unified-diff rows in retry patches for configured smart defaults", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-locator-patch");
+    const configDir = join(agentDir, "extensions", "pi-selector-patch");
     await mkdir(configDir, { recursive: true });
     await writeFile(
       join(configDir, "config.json"),
@@ -513,7 +513,7 @@ describe("patch visible status", () => {
     );
   });
 
-  it("applies update hunks with text-only locators", async () => {
+  it("applies update hunks with text-only selectors", async () => {
     const diff = ["@@", " :a", "-:old", "+new", " :z"].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
@@ -557,12 +557,12 @@ describe("patch visible status", () => {
       patchChars: 9,
       baselineChars: 13,
     });
-    expect(detailsLocatorEfficiency(result)).toEqual({
+    expect(detailsSelectorEfficiency(result)).toEqual({
       patchChars: 5,
       baselineChars: 9,
     });
   });
-  it("counts authored combined locator whitespace and blank unified-diff rows", async () => {
+  it("counts authored combined selector whitespace and blank unified-diff rows", async () => {
     const combinedPatch = [
       "*** Begin Patch",
       "*** Update File: file.txt",
@@ -662,15 +662,15 @@ describe("patch visible status", () => {
       patchChars: 10,
       baselineChars: 8,
     });
-    expect(detailsLocatorEfficiency(addResult)).toEqual({
+    expect(detailsSelectorEfficiency(addResult)).toEqual({
       patchChars: 0,
       baselineChars: 0,
     });
-    expect(detailsLocatorEfficiency(deleteResult)).toEqual({
+    expect(detailsSelectorEfficiency(deleteResult)).toEqual({
       patchChars: 0,
       baselineChars: 0,
     });
-    expect(detailsLocatorEfficiency(rangeResult)).toEqual({
+    expect(detailsSelectorEfficiency(rangeResult)).toEqual({
       patchChars: 10,
       baselineChars: 8,
     });
@@ -898,15 +898,15 @@ describe("patch visible status", () => {
     await expect(readFile(join(dir, "a.txt"), "utf8")).resolves.toBe("first");
   });
 
-  it("reports stale hunk failures by patch line without echoing locator text", async () => {
+  it("reports stale hunk failures by patch line without echoing selector text", async () => {
     const dir = await makePlainTempDir();
     await writeFile(join(dir, "a.txt"), "present");
-    const longLocator = "missing locator text that should not be repeated";
+    const longSelector = "missing selector text that should not be repeated";
     const patch = [
       "*** Begin Patch",
       "*** Update File: a.txt",
       "@@",
-      `-:${longLocator}`,
+      `-:${longSelector}`,
       "+replacement",
       "*** End Patch",
     ].join("\n");
@@ -918,7 +918,7 @@ describe("patch visible status", () => {
     );
     expect(message).toContain("[E_STALE_HUNK] Line 4: Hunk not found.");
     expect(message).not.toContain("match pattern");
-    expect(message).not.toContain(longLocator);
+    expect(message).not.toContain(longSelector);
   });
 
   it("omits stale hunk numbers because they are local to each Update section", async () => {
@@ -1044,7 +1044,7 @@ describe("patch visible status", () => {
     expect(message).toContain("[E_INVALID_PATCH]");
     expect(message).toContain("Retry patch:");
     const retryPatchPath = retryPatchPathFrom(message);
-    expect(dirname(retryPatchPath)).toBe(join(tmpdir(), "pi-locator-patch"));
+    expect(dirname(retryPatchPath)).toBe(join(tmpdir(), "pi-selector-patch"));
     expect(basename(retryPatchPath)).toMatch(/^[0-9a-f-]+\.patch$/);
     await expect(readFile(retryPatchPath, "utf8")).resolves.toBe(
       patch,
@@ -1336,7 +1336,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 150.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 150.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain("line-1");
@@ -1352,7 +1352,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "@@ matched line 1 @@",
-        "Warning: locator cost is 120.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 120.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("");

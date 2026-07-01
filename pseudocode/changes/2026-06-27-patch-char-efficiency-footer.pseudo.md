@@ -2,7 +2,7 @@
 affects:
   - src/patch-format.ts
   - src/apply.ts
-  - src/tools/locator-patch.ts
+  - src/tools/selector-patch.ts
   - src/tools/patch-render.ts
 ---
 
@@ -27,9 +27,9 @@ when applying or dry-running a patch succeeds:
   for Update File:
     for every applied hunk operation:
       insert row contributes authored +line chars to patch and canonical +line chars to baseline
-      context/delete locator row contributes preserved authored row chars to patch
+      context/delete selector row contributes preserved authored row chars to patch
       context/delete matched line contributes canonical unified-diff row chars to baseline
-      range locator row contributes authored range row chars to patch
+      range selector row contributes authored range row chars to patch
       matched range lines contribute canonical unified-diff rows to baseline
   attach aggregate {patchChars, baselineChars} to tool result details
 

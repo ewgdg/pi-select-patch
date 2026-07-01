@@ -42,8 +42,8 @@ export interface PatchHunkAudit {
   matcherKinds: PatchMatcherKind[];
   patchCharCount: number;
   baselineCharCount: number;
-  locatorPatchCharCount: number;
-  locatorBaselineCharCount: number;
+  selectorPatchCharCount: number;
+  selectorBaselineCharCount: number;
   survivingContextHashes: string[];
   insertedHashes: string[];
   deletedHashes: string[];
@@ -143,12 +143,12 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
 
 function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
-  validateNoConflictingLocators(hunk, hunkIndex);
+  validateNoConflictingSelectors(hunk, hunkIndex);
   const matchPattern = buildMatchPattern(hunk);
 
   if (matchPattern.length === 0) {
     if (hunk.anchorHint) {
-      throw new UnsupportedHunkError(`Hunk ${hunkIndex} anchor hint requires at least one context/deletion locator.`, hunkErrorLocation(hunk));
+      throw new UnsupportedHunkError(`Hunk ${hunkIndex} anchor hint requires at least one context/deletion selector.`, hunkErrorLocation(hunk));
     }
     if (lines.length === 0 && hunk.ops.every((op) => op.kind === "insert")) {
       const insertedHashes = hunk.ops.map((op) => hashFn(op.content));
@@ -172,15 +172,15 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
           matcherKinds: [],
           patchCharCount: insertedPatchCharCount,
           baselineCharCount: insertedBaselineCharCount,
-          locatorPatchCharCount: 0,
-          locatorBaselineCharCount: 0,
+          selectorPatchCharCount: 0,
+          selectorBaselineCharCount: 0,
           survivingContextHashes: [],
           insertedHashes,
           deletedHashes: []
         }
       };
     }
-    throw new UnsupportedHunkError(`Hunk ${hunkIndex} has no context/deletion locators; pure insertion requires an empty file.`, hunkErrorLocation(hunk));
+    throw new UnsupportedHunkError(`Hunk ${hunkIndex} has no context/deletion selectors; pure insertion requires an empty file.`, hunkErrorLocation(hunk));
   }
 
   validateSparseRanges(hunk, hunkIndex);
@@ -203,8 +203,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   const transcriptLines: PatchTranscriptLine[] = [];
   let patchCharCount = 0;
   let baselineCharCount = 0;
-  let locatorPatchCharCount = 0;
-  let locatorBaselineCharCount = 0;
+  let selectorPatchCharCount = 0;
+  let selectorBaselineCharCount = 0;
 
   for (const [opIndex, op] of hunk.ops.entries()) {
     if (op.kind === "insert") {
@@ -219,9 +219,9 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
     }
 
     if (op.kind === "range") {
-      const authoredRangeCharCount = authoredCharCount(op, renderRangeLocator(op.rangeKind).length);
+      const authoredRangeCharCount = authoredCharCount(op, renderRangeSelector(op.rangeKind).length);
       patchCharCount += authoredRangeCharCount;
-      locatorPatchCharCount += authoredRangeCharCount;
+      selectorPatchCharCount += authoredRangeCharCount;
       const range = match.ranges.get(opIndex);
       if (!range) {
         throw new Error("Internal patch error: missing sparse range match.");
@@ -229,7 +229,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       if (op.rangeKind === "context") {
         const baselineRangeCharCount = rangeCharCount(lines, range.start, range.end);
         baselineCharCount += baselineRangeCharCount;
-        locatorBaselineCharCount += baselineRangeCharCount;
+        selectorBaselineCharCount += baselineRangeCharCount;
         replacement.push(...lines.slice(range.start, range.end).map(markLineTouched));
         transcriptLines.push({ kind: "contextRange", content: renderSkippedContextRange(range.end - range.start) });
       } else {
@@ -237,7 +237,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
           const targetContent = lines[lineIndex].content;
           const baselineLineCharCount = prefixedLineCharCount(targetContent);
           baselineCharCount += baselineLineCharCount;
-          locatorBaselineCharCount += baselineLineCharCount;
+          selectorBaselineCharCount += baselineLineCharCount;
           const targetHash = hashFn(targetContent);
           transcriptLines.push({ kind: "delete", content: targetContent });
           deletedHashes.push(targetHash);
@@ -251,12 +251,12 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       throw new Error("Internal patch error: missing hash operation match.");
     }
     const targetContent = lines[targetIndex].content;
-    const authoredLocatorCharCount = authoredCharCount(op, renderMatchLocator(op).length);
-    const baselineLocatorCharCount = prefixedLineCharCount(targetContent);
-    patchCharCount += authoredLocatorCharCount;
-    baselineCharCount += baselineLocatorCharCount;
-    locatorPatchCharCount += authoredLocatorCharCount;
-    locatorBaselineCharCount += baselineLocatorCharCount;
+    const authoredSelectorCharCount = authoredCharCount(op, renderMatchSelector(op).length);
+    const baselineSelectorCharCount = prefixedLineCharCount(targetContent);
+    patchCharCount += authoredSelectorCharCount;
+    baselineCharCount += baselineSelectorCharCount;
+    selectorPatchCharCount += authoredSelectorCharCount;
+    selectorBaselineCharCount += baselineSelectorCharCount;
     const targetHash = hashFn(targetContent);
     if (op.kind === "context") {
       replacement.push(markLineTouched(lines[targetIndex]));
@@ -280,8 +280,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       matcherKinds: buildMatcherKinds(currentEntries, hunk, match, resolvedMatch.smartMatcherKinds),
       patchCharCount,
       baselineCharCount,
-      locatorPatchCharCount,
-      locatorBaselineCharCount,
+      selectorPatchCharCount,
+      selectorBaselineCharCount,
       survivingContextHashes,
       insertedHashes,
       deletedHashes
@@ -309,7 +309,7 @@ interface CurrentLineEntry {
 type LineMatcher = (line: CurrentLineEntry, op: MatchPatchOp) => boolean;
 
 function lineMatchesOp(line: CurrentLineEntry, op: MatchPatchOp): boolean {
-  return line.availableForHunkMatch && hasMatchLocator(op) && (op.hash === undefined || op.hash === line.hash.slice(0, op.hash.length)) && textSelectorMatches(line.content, op);
+  return line.availableForHunkMatch && hasMatchSelector(op) && (op.hash === undefined || op.hash === line.hash.slice(0, op.hash.length)) && textSelectorMatches(line.content, op);
 }
 
 function markLineTouched(line: PatchLineState): PatchLineState {
@@ -337,10 +337,10 @@ function bestSmartMatcherKind(query: string, targetLine: string): SmartMatcherKi
 }
 
 function smartTokenSubsequenceMatches(content: string, query: string): boolean {
-  const queryTokens = tokenizeSmartLocator(query);
+  const queryTokens = tokenizeSmartSelector(query);
   if (queryTokens.length < 1) return false;
 
-  const targetTokens = tokenizeSmartLocator(content);
+  const targetTokens = tokenizeSmartSelector(content);
   let targetIndex = 0;
   for (const queryToken of queryTokens) {
     targetIndex = targetTokens.findIndex((targetToken, offset) => offset >= targetIndex && targetToken === queryToken);
@@ -350,7 +350,7 @@ function smartTokenSubsequenceMatches(content: string, query: string): boolean {
   return true;
 }
 
-function tokenizeSmartLocator(text: string): string[] {
+function tokenizeSmartSelector(text: string): string[] {
   return text.split(/\s+/).filter((token) => token.length > 0);
 }
 
@@ -362,7 +362,7 @@ function combinedSelectorMatches(content: string, selector: NonNullable<MatchPat
   );
 }
 
-function hasMatchLocator(op: MatchPatchOp): boolean {
+function hasMatchSelector(op: MatchPatchOp): boolean {
   return op.hash !== undefined || op.content !== undefined || op.combinedSelector !== undefined;
 }
 
@@ -373,7 +373,7 @@ function findResolvedHunkMatch(
   searchStart: number,
   searchEnd: number | undefined
 ): ResolvedHunkMatch | undefined {
-  if (!hunkHasSmartLocator(hunk)) {
+  if (!hunkHasSmartSelector(hunk)) {
     const matches = hunkHasSparseRange(hunk)
       ? findSparseMatches(entries, hunk.ops, 2, searchStart, searchEnd)
       : findContiguousMatches(entries, matchOps, searchStart, searchEnd).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
@@ -403,7 +403,7 @@ function findResolvedHunkMatch(
   return bestCandidates[0];
 }
 
-function hunkHasSmartLocator(hunk: Hunk): boolean {
+function hunkHasSmartSelector(hunk: Hunk): boolean {
   return hunk.ops.some((op) => isMatchOp(op) && op.smart === true);
 }
 
@@ -429,8 +429,8 @@ function renderAnchorSearchScope(hunk: Hunk): string {
 function buildMatchPattern(hunk: Hunk): string[] {
   return hunk.ops.flatMap((op) => {
     if (op.kind === "insert") return [];
-    if (op.kind === "range") return [renderRangeLocator(op.rangeKind)];
-    return [renderMatchLocator(op)];
+    if (op.kind === "range") return [renderRangeSelector(op.rangeKind)];
+    return [renderMatchSelector(op)];
   });
 }
 
@@ -467,14 +467,14 @@ function resolvedSmartMatcherKind(entries: readonly CurrentLineEntry[], opIndex:
   return "exact";
 }
 
-function renderRangeLocator(rangeKind: "context" | "delete"): string {
+function renderRangeSelector(rangeKind: "context" | "delete"): string {
   return `${rangeKind === "context" ? " " : "-"}...`;
 }
 
-function renderMatchLocator(op: MatchPatchOp): string {
-  if (!hasMatchLocator(op)) return "<missing locator>";
-  if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) return "<invalid hash+text locator>";
-  if (op.content !== undefined && op.combinedSelector !== undefined) return "<invalid mixed text locator>";
+function renderMatchSelector(op: MatchPatchOp): string {
+  if (!hasMatchSelector(op)) return "<missing selector>";
+  if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) return "<invalid hash+text selector>";
+  if (op.content !== undefined && op.combinedSelector !== undefined) return "<invalid mixed text selector>";
   if (op.hash !== undefined) return `${op.kind === "context" ? " #" : "-#"}${op.hash}`;
   if (op.combinedSelector !== undefined) return `${op.kind === "context" ? " ?" : "-?"}${JSON.stringify(op.combinedSelector)}`;
   if (op.smart === true) return `${op.kind === "context" ? " ~" : "-~"}${op.content ?? ""}`;
@@ -522,16 +522,16 @@ function validateHunkAnchorHint(hunk: Hunk, hunkIndex: number): void {
   }
 }
 
-function validateNoConflictingLocators(hunk: Hunk, hunkIndex: number): void {
+function validateNoConflictingSelectors(hunk: Hunk, hunkIndex: number): void {
   for (const op of hunk.ops) {
     if (isMatchOp(op) && op.smart === true && op.content === undefined) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} smart locators require text content.`, patchErrorLocation(op, hunk));
+      throw new InvalidPatchError(`Hunk ${hunkIndex} smart selectors require text content.`, patchErrorLocation(op, hunk));
     }
     if (isMatchOp(op) && op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text locators are not supported. Use hash-only or text-only locator.`, patchErrorLocation(op, hunk));
+      throw new InvalidPatchError(`Hunk ${hunkIndex} hash+text selectors are not supported. Use hash-only or text-only selector.`, patchErrorLocation(op, hunk));
     }
     if (isMatchOp(op) && op.content !== undefined && op.combinedSelector !== undefined) {
-      throw new InvalidPatchError(`Hunk ${hunkIndex} mixed text locators are not supported. Use exactly one text locator form.`, patchErrorLocation(op, hunk));
+      throw new InvalidPatchError(`Hunk ${hunkIndex} mixed text selectors are not supported. Use exactly one text selector form.`, patchErrorLocation(op, hunk));
     }
     if (isMatchOp(op) && op.combinedSelector !== undefined) {
       op.combinedSelector = normalizeCombinedTextSelector(op.combinedSelector, `Hunk ${hunkIndex} combined selector`);
@@ -654,7 +654,7 @@ function collectSparseSmartMatchCandidates(state: {
 }
 
 function matchSmartCandidateLine(line: CurrentLineEntry | undefined, op: MatchPatchOp): PatchMatcherKind | undefined {
-  if (!line || !line.availableForHunkMatch || !hasMatchLocator(op)) return undefined;
+  if (!line || !line.availableForHunkMatch || !hasMatchSelector(op)) return undefined;
   if (op.hash !== undefined && op.hash !== line.hash.slice(0, op.hash.length)) return undefined;
   if (op.smart !== true) return textSelectorMatches(line.content, op) ? "exact" : undefined;
   if (op.content === undefined) return undefined;

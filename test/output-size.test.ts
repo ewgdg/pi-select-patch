@@ -8,13 +8,13 @@ import {
   LLM_VISIBLE_OUTPUT_MAX_BYTES,
   LLM_VISIBLE_OUTPUT_MAX_LINES,
 } from "../src/output-size.js";
-import { patchTool } from "../src/tools/locator-patch.js";
-import { readHashTool } from "../src/tools/locator-read.js";
+import { patchTool } from "../src/tools/selector-patch.js";
+import { readHashTool } from "../src/tools/selector-read.js";
 
 const makeTempDir = async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-locator-patch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
-  delete process.env.PI_LOCATOR_PATCH_PROFILE;
+  delete process.env.PI_SELECTOR_PATCH_PROFILE;
   return dir;
 };
 const row = (prefix: " " | "-" | "+", content: string) =>
@@ -98,7 +98,7 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 125.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain(hugeReplacement);
@@ -131,7 +131,7 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: locator cost is 125.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(insertedRows.join("\n"));

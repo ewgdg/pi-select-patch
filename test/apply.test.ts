@@ -37,14 +37,14 @@ describe("applyPatchToText", () => {
     expect(insertResult.text).toBe("start\nmiddle\nend");
   });
 
-  it("matches 3-character hash locator prefixes", () => {
+  it("matches 3-character hash selector prefixes", () => {
     const result = applyPatchToText("alpha target\nold value", patch(` #${hashLine("alpha target").slice(0, 3)}`, `-#${hashLine("old value").slice(0, 3)}`, "+new value"));
 
     expect(result.text).toBe("alpha target\nnew value");
   });
 
 
-  it("matches prefix text locators for context and delete operations", () => {
+  it("matches prefix text selectors for context and delete operations", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}",
       patch(" ^function parsePatchOp", "-^  return old", "+  return newValue;", " :}")
@@ -54,7 +54,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
   });
 
-  it("matches omitted-space context locator rows without unified-diff matching", () => {
+  it("matches omitted-space context selector rows without unified-diff matching", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}",
       patch("^function parsePatchOp", "-^  return old", "+  return newValue;", ":}")
@@ -65,7 +65,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
   });
 
-  it("matches suffix text locators for context and delete operations", () => {
+  it("matches suffix text selectors for context and delete operations", () => {
     const result = applyPatchToText(
       "const value = computeOld();\nreturn value;\nfinished();",
       patch(" $computeOld();", "-$value;", "+return nextValue;", " $finished();")
@@ -75,7 +75,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" $computeOld();", "-$value;", " $finished();"]);
   });
 
-  it("matches contains text locators for context and delete operations", () => {
+  it("matches contains text selectors for context and delete operations", () => {
     const result = applyPatchToText(
       "const value = computeOld();\nreturn value;\nfinished();",
       patch(" *computeOld", "-*turn val", "+return nextValue;", " *ished")
@@ -85,7 +85,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" *computeOld", "-*turn val", " *ished"]);
   });
 
-  it("matches combined text locators by all supplied predicates", () => {
+  it("matches combined text selectors by all supplied predicates", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}\nfinished();",
       patch(
@@ -106,7 +106,7 @@ describe("applyPatchToText", () => {
     ]);
   });
 
-  it("throws stale and ambiguous for prefix, contains, and suffix locators", () => {
+  it("throws stale and ambiguous for prefix, contains, and suffix selectors", () => {
     expect(() => applyPatchToText("alpha one", patch("-^beta"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("one omega", patch("-*alpha"))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("one omega", patch("-$alpha"))).toThrow(StaleHunkError);
@@ -117,7 +117,7 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText("prefix alpha suffix\nprefix beta suffix", patch('-?{"prefix":"prefix","suffix":"suffix"}'))).toThrow(AmbiguousHunkError);
   });
 
-  it("matches context/delete locators by hash-only and text-only forms", () => {
+  it("matches context/delete selectors by hash-only and text-only forms", () => {
     const result = applyPatchToText(
       "a\nold\nz",
       patch(row(" ", "a"), "-:old", "+new", " :z")
@@ -126,7 +126,7 @@ describe("applyPatchToText", () => {
     expect(result.text).toBe("a\nnew\nz");
   });
 
-  it("applies unified-diff rows when locator markers are missing", () => {
+  it("applies unified-diff rows when selector markers are missing", () => {
     const result = applyPatchToText("a\nold\nz", patch(" a", "-old", "+new", " z"));
 
     expect(result.text).toBe("a\nnew\nz");
@@ -142,7 +142,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" :a", " :", "-:old", " :z"]);
   });
 
-  it("does not retry with unified exact matching when locator matching finds no span", () => {
+  it("does not retry with unified exact matching when selector matching finds no span", () => {
     expect(() => applyPatchToText("^literal\n#abc", patch(" ^literal", "-#abc", "+done"))).toThrow(StaleHunkError);
   });
 
@@ -195,22 +195,22 @@ describe("applyPatchToText", () => {
   });
 
   it("rejects hunk anchor hints on pure insert hunks", () => {
-    expect(() => applyPatchToText("", anchoredPatch(1, "+first"))).toThrow("anchor hint requires at least one context/deletion locator");
+    expect(() => applyPatchToText("", anchoredPatch(1, "+first"))).toThrow("anchor hint requires at least one context/deletion selector");
   });
 
   it("rejects API match ops containing both hash and text", () => {
-    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), content: "target" }] }] })).toThrow("hash+text locators are not supported");
-    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), combinedSelector: { contains: ["target"] } }] }] })).toThrow("hash+text locators are not supported");
-    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", content: "target", combinedSelector: { contains: ["target"] } }] }] })).toThrow("mixed text locators are not supported");
+    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), content: "target" }] }] })).toThrow("hash+text selectors are not supported");
+    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), combinedSelector: { contains: ["target"] } }] }] })).toThrow("hash+text selectors are not supported");
+    expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", content: "target", combinedSelector: { contains: ["target"] } }] }] })).toThrow("mixed text selectors are not supported");
   });
 
-  it("rejects malformed API combined selector locators", () => {
+  it("rejects malformed API combined selector selectors", () => {
     expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: {} }] }] })).toThrow("requires at least one");
     expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: { contains: [] } }] }] })).toThrow("contains");
     expect(() => applyPatchToText("target", { hunks: [{ ops: [{ kind: "context", combinedSelector: { unknown: "target" } as never }] }] })).toThrow("unknown key");
   });
 
-  it("matches blank-line and separator-leading text locators", () => {
+  it("matches blank-line and separator-leading text selectors", () => {
     const blankResult = applyPatchToText("start\n\nend", patch(" :start", "-:", " :end"));
     expect(blankResult.text).toBe("start\nend");
 
@@ -218,7 +218,7 @@ describe("applyPatchToText", () => {
     expect(separatorResult.text).toBe("start\nnew\nend");
   });
 
-  it("uses text locators as sparse range anchors", () => {
+  it("uses text selectors as sparse range anchors", () => {
     const result = applyPatchToText("start\nremove\nend", patch(" :start", "-...", " :end"));
 
     expect(result.text).toBe("start\nend");
@@ -314,7 +314,7 @@ describe("applyPatchToText", () => {
     expect(applyPatchToText("a\nb", patch(row("-", "a"), row("-", "b"))).text).toBe("");
   });
 
-  it("throws stale for absent or changed context/delete locators", () => {
+  it("throws stale for absent or changed context/delete selectors", () => {
     expect(() => applyPatchToText("a\nchanged\nz", patch(row(" ", "a"), row("-", "old"), row(" ", "z")))).toThrow(StaleHunkError);
     expect(() => applyPatchToText("a\nold\nchanged", patch(row(" ", "a"), row("-", "old"), row(" ", "z")))).toThrow(StaleHunkError);
   });
@@ -341,7 +341,7 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText("a\nb\na\nb", patch(row(" ", "a"), row("-", "b")))).toThrow(AmbiguousHunkError);
   });
 
-  it("matches hash-only locators by hash and preserves target context content on hash collision", () => {
+  it("matches hash-only selectors by hash and preserves target context content on hash collision", () => {
     const hashFn = (content: string) => (content === "target" || content === "patch" ? "AAAA" : hashLine(content));
     const result = applyPatchToText("target\nold", patch(row(" ", "patch", hashFn), row("-", "old", hashFn), row("+", "new", hashFn)), { hashFn });
     expect(result.text).toBe("target\nnew");
@@ -358,7 +358,7 @@ describe("applyPatchToText", () => {
     expect(applyPatchToText("a\nold", patch(row(" ", "a"), row("-", "old"), row("+", "new"))).text).toBe("a\nnew");
   });
 
-  it("resolves smart locators by exact before broader tiers", () => {
+  it("resolves smart selectors by exact before broader tiers", () => {
     const result = applyPatchToText("target text\ntarget text plus", patch("-~target text", "+replacement"));
 
     expect(result.text).toBe("replacement\ntarget text plus");
@@ -366,7 +366,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["exact"]);
   });
 
-  it("applies parsed smart-profile unified-diff-style locators", () => {
+  it("applies parsed smart-profile unified-diff-style selectors", () => {
     const parsed = parsePatch(["@@", " alpha exact", "-contains target", "+replacement"].join("\n"), undefined, 0, { profile: "smart" });
     const result = applyPatchToText("alpha exact\nprefix contains target suffix", parsed);
 
@@ -375,7 +375,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
   });
 
-  it("matches blank smart locators exactly", () => {
+  it("matches blank smart selectors exactly", () => {
     const parsed = parsePatch(["@@", " before", "-", " after"].join("\n"), undefined, 0, { profile: "smart" });
     const profileResult = applyPatchToText("before\n\nafter", parsed);
     const explicitResult = applyPatchToText("before\n\nafter", patch(" ~before", "-~", " ~after"));
@@ -393,7 +393,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
   });
 
-  it("uses subsequence matching for locator whitespace drift", () => {
+  it("uses subsequence matching for selector whitespace drift", () => {
     const result = applyPatchToText("${profilePolicy}", patch("-~    ${profilePolicy}", "+replacement"));
 
     expect(result.text).toBe("replacement");
@@ -446,7 +446,7 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["subsequence"]);
   });
 
-  it("uses fixed locators and sparse ranges with smart hunk matching", () => {
+  it("uses fixed selectors and sparse ranges with smart hunk matching", () => {
     const constrained = applyPatchToText("unique\ntarget one\nother\ntarget two", patch(" :unique", "-~target", "+replacement"));
     expect(constrained.text).toBe("unique\nreplacement\nother\ntarget two");
     expect(constrained.hunkAudits[0].matcherKinds).toEqual(["exact", "prefix"]);

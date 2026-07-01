@@ -8,12 +8,12 @@ import {
   readExistingTextFile,
   writeTextFileAtomically,
 } from "../src/api.js";
-import { patchTool } from "../src/tools/locator-patch.js";
+import { patchTool } from "../src/tools/selector-patch.js";
 
 const makeTempDir = async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-locator-patch-"));
+  const dir = await mkdtemp(join(tmpdir(), "pi-selector-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
-  delete process.env.PI_LOCATOR_PATCH_PROFILE;
+  delete process.env.PI_SELECTOR_PATCH_PROFILE;
   return dir;
 };
 const row = (prefix: " " | "-" | "+", content: string) =>
@@ -84,7 +84,7 @@ describe("patch tool", () => {
       [
         "*** Update File: file.txt",
         "Validated",
-        "Warning: locator cost is 125.0% of baseline. Use shorter locators or ... ranges.",
+        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("old");

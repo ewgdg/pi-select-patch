@@ -23,6 +23,6 @@ when parsing hunk operation rows:
     + starts insert content
     space or = starts context content
     - starts delete content
-    explicit locator rows keep locator behavior
+    explicit selector rows keep selector behavior
     malformed unsupported prefixes still reject
 ```

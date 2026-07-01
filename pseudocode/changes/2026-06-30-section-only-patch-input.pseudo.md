@@ -2,9 +2,9 @@
 affects:
   - src/dedent.ts
   - src/universal-patch-format.ts
-  - src/tools/locator-patch.ts
+  - src/tools/selector-patch.ts
   - test/universal-patch-format.test.ts
-  - test/locator-patch-tool.test.ts
+  - test/selector-patch-tool.test.ts
   - README.md
   - docs/patch-format.md
 ---

@@ -1,11 +1,11 @@
 {
-  "name": "pi-locator-patch",
+  "name": "pi-selector-patch",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Pi extension for explicit locator reads and patch application.",
-  "keywords": ["pi-package", "locator", "patch"],
+  "description": "Pi extension for explicit selector reads and patch application.",
+  "keywords": ["pi-package", "selector", "patch"],
   "scripts": {
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

@@ -7,7 +7,7 @@ affects:
 
 ## Intent
 
-Show which locator matcher kinds were used in a successful patch result so humans can diagnose whether the patch relied on exact text, prefix/suffix/contains, hashes, combined selectors, or ranges.
+Show which selector matcher kinds were used in a successful patch result so humans can diagnose whether the patch relied on exact text, prefix/suffix/contains, hashes, combined selectors, or ranges.
 
 ## Behavior
 
@@ -15,7 +15,7 @@ Show which locator matcher kinds were used in a successful patch result so human
 When rendering a successful patch result:
   render current success summary and diff preview
   inspect result details for per-file hunk audit matchPattern entries
-  classify each match pattern token by locator marker:
+  classify each match pattern token by selector marker:
     ':' -> exact
     '^' -> prefix
     '*' -> contains

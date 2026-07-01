@@ -7,7 +7,7 @@ affects:
 
 ## Intent
 
-Only classic profile parses locator markers. Markerless profiles preserve authored selector text exactly, except for operation prefixes (`+` insert and `-` delete).
+Only classic profile parses selector markers. Markerless profiles preserve authored selector text exactly, except for operation prefixes (`+` insert and `-` delete).
 
 ## Behavior
 
@@ -22,7 +22,7 @@ when parsing a hunk operation row in smart profile:
     preserve all leading spaces in the smart context text
 
 when parsing a hunk operation row in classic profile:
-  parse explicit locator markers
+  parse explicit selector markers
   support optional omitted context operator only before explicit markers
   preserve classic unified-diff exact context/delete fallback
 

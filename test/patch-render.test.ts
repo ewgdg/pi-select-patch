@@ -8,7 +8,7 @@ import {
   buildPatchResultRenderText,
   formatPatchResultDiff,
   getPatchCharEfficiency,
-  getPatchLocatorEfficiency,
+  getPatchSelectorEfficiency,
   getPatchMatcherStats,
   getPatchDiffStats,
   getPatchResultDiff,
@@ -69,7 +69,7 @@ describe("patch renderer helpers", () => {
     expect(getPatchDiffStats(diff)).toEqual({ additions: 1, removals: 1, totalLines: 5 });
   });
 
-  it("counts matcher locator kinds from hunk audit match patterns", () => {
+  it("counts matcher selector kinds from hunk audit match patterns", () => {
     const details = {
       files: [
         {
@@ -137,12 +137,12 @@ describe("patch renderer helpers", () => {
   it("reads and renders patch char efficiency from result details", () => {
     const details = {
       charEfficiency: { patchChars: 5, baselineChars: 9 },
-      locatorEfficiency: { patchChars: 7, baselineChars: 10 },
+      selectorEfficiency: { patchChars: 7, baselineChars: 10 },
       diff: "--- a/file\n+++ b/file\n-old text\n+new"
     };
 
     expect(getPatchCharEfficiency(details)).toEqual({ patchChars: 5, baselineChars: 9 });
-    expect(getPatchLocatorEfficiency(details)).toEqual({ patchChars: 7, baselineChars: 10 });
+    expect(getPatchSelectorEfficiency(details)).toEqual({ patchChars: 7, baselineChars: 10 });
 
     const rendered = buildPatchResultRenderText({
       details,
@@ -153,13 +153,13 @@ describe("patch renderer helpers", () => {
     });
 
     expect(rendered).toContain("<muted>Patch efficiency: 5/9 chars vs baseline (55.6%, saved 44.4%)</muted>");
-    expect(rendered).toContain("<warning>Warning: locator cost is 70.0% of baseline. Use shorter locators or ... ranges.</warning>");
+    expect(rendered).toContain("<warning>Warning: selector cost is 70.0% of baseline. Use shorter selectors or ... ranges.</warning>");
   });
 
-  it("skips locator cost warning at or below half of baseline", () => {
+  it("skips selector cost warning at or below half of baseline", () => {
     const rendered = buildPatchResultRenderText({
       details: {
-        locatorEfficiency: { patchChars: 5, baselineChars: 10 },
+        selectorEfficiency: { patchChars: 5, baselineChars: 10 },
         diff: "--- a/file\n+++ b/file\n-old text\n+new"
       },
       expanded: false,
@@ -168,7 +168,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).not.toContain("locator cost");
+    expect(rendered).not.toContain("selector cost");
   });
 
   it("renders collapsed diff with compact limit, color, omission count, and Ctrl+O hint", () => {
@@ -231,7 +231,7 @@ describe("patch renderer helpers", () => {
         "[E_STALE_HUNK] Could not find hunk match.",
         "Skipped:",
         "(none)",
-        "Retry patch: /tmp/pi-locator-patch-abc/retry.patch"
+        "Retry patch: /tmp/pi-selector-patch-abc/retry.patch"
       ].join("\n"),
       details: undefined,
       expanded: false,
@@ -242,7 +242,7 @@ describe("patch renderer helpers", () => {
     });
 
     expect(rendered).toContain("Failed:\n*** Update File: src/file.ts\n[E_STALE_HUNK] Could not find hunk match.");
-    expect(rendered).toContain("Retry patch: /tmp/pi-locator-patch-abc/retry.patch");
+    expect(rendered).toContain("Retry patch: /tmp/pi-selector-patch-abc/retry.patch");
     expect(rendered.indexOf("Failed:")).toBeLessThan(rendered.indexOf("Agent input preview"));
     expect(rendered).not.toContain("Applied:\n(none)");
     expect(rendered).not.toContain("Skipped:\n(none)");
@@ -285,7 +285,7 @@ describe("patch renderer helpers", () => {
     ].join("\n");
 
     const rendered = buildPatchResultRenderText({
-      resultText: "[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or locator row.",
+      resultText: "[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or selector row.",
       details: undefined,
       expanded: false,
       isPartial: false,
@@ -294,7 +294,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or locator row.</error>");
+    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or selector row.</error>");
     expect(rendered).toContain("Agent input around line 18 (patch, lines 14-20 of 20):");
     expect(rendered).toContain("... 13 earlier input lines omitted");
     expect(rendered).toContain("<error>18 │ </error><toolDiffContext>old raw context</toolDiffContext>");

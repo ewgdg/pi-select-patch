@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hashLine } from "../src/api.js";
-import { hashProfileReadTool, readHashTool } from "../src/tools/locator-read.js";
+import { hashProfileReadTool, readHashTool } from "../src/tools/selector-read.js";
 
-const makeTempDir = () => mkdtemp(join(tmpdir(), "pi-locator-patch-"));
+const makeTempDir = () => mkdtemp(join(tmpdir(), "pi-selector-patch-"));
 
 const firstText = (result: Awaited<ReturnType<typeof readHashTool.execute>>) => {
   const content = result.content[0];

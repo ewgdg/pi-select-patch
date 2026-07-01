@@ -16,9 +16,9 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { applyPatchToText, type ApplyPatchResult } from "../apply.js";
 import {
-  readLocatorPatchConfig,
-  type LocatorPatchConfig,
-  type LocatorPatchProfile,
+  readSelectorPatchConfig,
+  type SelectorPatchConfig,
+  type SelectorPatchProfile,
 } from "../config.js";
 import {
   renderPatchHashReceiptDiffs,
@@ -41,7 +41,7 @@ import {
   writeNewTextFileAtomically,
   writeTextFileAtomically,
 } from "../fs-text.js";
-import { formatLocatorCostWarning, type PatchCharEfficiency } from "../locator-efficiency.js";
+import { formatSelectorCostWarning, type PatchCharEfficiency } from "../selector-efficiency.js";
 import {
   countRenderedLines,
   getVisibleOutputOverflow,
@@ -63,7 +63,7 @@ import {
 } from "./patch-render.js";
 import { dedentBlock } from "../dedent.js";
 
-function buildPatchParameterDescription(profile: LocatorPatchProfile): string {
+function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
   const hunkMatchDescription = indentNonBlankLines(buildPatchHunkMatchDescription(profile), "    ");
   const examples = indentNonBlankLines(buildPatchParameterExamples(profile), "    ");
   return dedentBlock(`
@@ -109,11 +109,11 @@ function indentNonBlankLines(text: string, indent: string): string {
     .join("\n");
 }
 
-function buildPatchHunkMatchDescription(profile: LocatorPatchProfile): string {
+function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
     return dedentBlock(`
       ### Hunk Match: Smart Profile
-      Context/delete rows use smart locators.
+      Context/delete rows use smart selectors.
       Use \` <text>\` rows for context and \`-<text>\` rows for deletes. Use a blank hunk row or single-space row for blank context; use \`-\` to delete a blank line.
       Smart rows resolve independently to exact, prefix, suffix, contains, or whitespace token-subsequence match; the whole hunk applies only with one dominance winner.
       Range rows are \` ...\` for preserved/skipped context and \`-...\` for deleted ranges.
@@ -131,32 +131,33 @@ function buildPatchHunkMatchDescription(profile: LocatorPatchProfile): string {
   }
   return dedentBlock(`
     ### Hunk Match: Classic Profile
-    A hunk contains line matchers. Match operators are "-" for delete and literal space " " for context.
-    Context locator rows may omit the leading space when the row starts with a locator marker.
-    Locator markers:
+    A hunk contains line matchers. A matcher / match row is operator plus selector.
+    Match operators are "-" for delete and literal space " " for context. Insert rows use "+" plus literal content and have no selector.
+    Context selector rows may omit the leading space when the row starts with a selector marker.
+    Selector markers:
     - \`^<prefix>\`: prefix match
     - \`:<text>\`: exact raw line match
     - \`$<suffix>\`: suffix match
     - \`*<text>\`: contains match
     - \`~<text>\`: smart match
-    - \`#<hash>\`: hash match when hash locators are enabled by \`receipt: "hash"\`
-    - \`?<json-obj>\`: combined locator with \`prefix\`, \`contains\`, and/or \`suffix\`
+    - \`#<hash>\`: hash match when hash selectors are enabled by \`receipt: "hash"\`
+    - \`?<json-obj>\`: combined selector with \`prefix\`, \`contains\`, and/or \`suffix\`
     - \`...\`: range row; use \`...\` for context range and \`-...\` for delete range
-    If no locator marker follows the operator, classic profile uses exact unified-diff matching: \` text\` is exact context and \`-text\` is exact delete. Bare exact context text without leading space is invalid.
+    If no selector marker follows the operator, classic profile uses exact unified-diff matching: \` text\` is exact context and \`-text\` is exact delete. Bare exact context text without leading space is invalid.
   `);
 }
 
-function buildPatchProfilePolicy(profile: LocatorPatchProfile): string {
+function buildPatchProfilePolicy(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
     return "Prefer short smart rows. Include enough neighboring smart context or an anchor hint when text may repeat.";
   }
   if (profile === "hash") {
     return "Prefer the shortest unique hash width available from `read`. Use ` ...`/`-...` ranges to avoid listing many unchanged/deleted hashes.";
   }
-  return "Use partial-match-based locators when target/context lines are long enough that shortened prefix/suffix/contains saves more than patch locator marker cost. Use hash locators only when hash locators are enabled and a hash is already known. Use the shortest prefix/suffix/contains locator that uniquely identifies the target line in hunk context. Avoid exact text locators and unified-diff format unless needed to disambiguate hunk matches.";
+  return "Use partial-match-based selectors when target/context lines are long enough that shortened prefix/suffix/contains saves more than selector marker cost. Use hash selectors only when hash selectors are enabled and a hash is already known. Use the shortest prefix/suffix/contains selector that uniquely identifies the target line in hunk context. Avoid exact text selectors and unified-diff format unless needed to disambiguate hunk matches.";
 }
 
-function buildPatchParameterExamples(profile: LocatorPatchProfile): string {
+function buildPatchParameterExamples(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
     return dedentBlock(`
       <example description="smart replacement">
@@ -218,7 +219,7 @@ function buildPatchParameterExamples(profile: LocatorPatchProfile): string {
     `);
   }
   return dedentBlock(`
-    <example description="patch locator cost efficiency">
+    <example description="patch selector cost efficiency">
     <content>
     aaaaaaaaaab
     aaaaacaaaaa
@@ -235,7 +236,7 @@ function buildPatchParameterExamples(profile: LocatorPatchProfile): string {
     +new text
     </bad_patch_snippet>
     <explanation>
-    Exact text match works, but costs more than shorter locators.
+    Exact text match works, but costs more than shorter selectors.
     </explanation>
     <patch>
     *** Update File: path/to/file.txt
@@ -317,7 +318,7 @@ interface PatchProfileDefaults {
 }
 
 const PATCH_PROFILE_DEFAULTS: Record<
-  LocatorPatchProfile,
+  SelectorPatchProfile,
   PatchProfileDefaults
 > = {
   classic: { receipt: "status" },
@@ -327,11 +328,11 @@ const PATCH_PROFILE_DEFAULTS: Record<
 
 export const patchTool = defineTool({
   name: "patch",
-  label: "Locator Patch",
+  label: "Selector Patch",
   description:
     "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
   promptSnippet:
-    "Use this tool for patching. Pick the locator costing the least.",
+    "Use this tool for patching. Pick the selector costing the least.",
   promptGuidelines: buildPatchPromptGuidelines("classic"),
   parameters: buildPatchToolParameters("classic"),
   async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -344,7 +345,7 @@ export const patchTool = defineTool({
       params.patch_file,
       ctx.cwd,
     );
-    const config = await readLocatorPatchConfig();
+    const config = await readSelectorPatchConfig();
     const executionOptions = resolvePatchExecutionOptions(params, config);
     const universalPatch = await parsePatchInputWithRetryPatch(
       patchText,
@@ -430,13 +431,13 @@ export const patchTool = defineTool({
 });
 
 export function setPatchToolProfileGuideline(
-  profile: LocatorPatchProfile,
+  profile: SelectorPatchProfile,
 ): void {
   patchTool.promptGuidelines = buildPatchPromptGuidelines(profile);
   patchTool.parameters = buildPatchToolParameters(profile);
 }
 
-function buildPatchToolParameters(profile: LocatorPatchProfile) {
+function buildPatchToolParameters(profile: SelectorPatchProfile) {
   return Type.Object(
     {
       patch: Type.Optional(
@@ -466,15 +467,15 @@ function buildPatchToolParameters(profile: LocatorPatchProfile) {
   );
 }
 
-function buildPatchPromptGuidelines(profile: LocatorPatchProfile): string[] {
+function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
   return [
     dedentBlock(`
       <patch_tool_policy>
       ${buildPatchProfilePromptGuideline(profile)}
-      ${profile === "classic" ? "Classic profile supports explicit locator markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
+      ${profile === "classic" ? "Classic profile supports explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       <important>Token efficiency is the highest priority.</important>
       ${buildPatchProfilePolicy(profile)}
-      <important>Use range locator whenever possible for hunks > 3 lines.</important>
+      <important>Use range selector whenever possible for hunks > 3 lines.</important>
       Use line anchors to disambiguate only if the latest accurate line offset is available or add extra redundancy to the anchors.
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
       </patch_tool_policy>
@@ -482,21 +483,21 @@ function buildPatchPromptGuidelines(profile: LocatorPatchProfile): string[] {
   ];
 }
 
-function buildPatchProfilePromptGuideline(profile: LocatorPatchProfile): string {
+function buildPatchProfilePromptGuideline(profile: SelectorPatchProfile): string {
   if (profile === "hash") {
     return "Hash profile active: update hunk rows use hashes after unified-diff operators: use ` a`, `-b3`, ranges (` ...`, `-...`), and inserts (`+literal`). `patch` success returns a compact hash-only receipt with context hashes and inserted-line hashes. Treat patch receipt as current state for touched hunks.";
   }
   if (profile === "smart") {
     return "smart profile active: context/delete rows use unified-diff operators with smart selector text; `read` remains plain text; patch success returns compact status rows unless overridden.";
   }
-  return "classic profile active: context/delete rows without locator markers use exact unified-diff behavior; hash locators and hash receipts require `receipt: \"hash\"`.";
+  return "classic profile active: context/delete rows without selector markers use exact unified-diff behavior; hash selectors and hash receipts require `receipt: \"hash\"`.";
 }
 
 function resolvePatchExecutionOptions(
   params: {
     receipt?: PatchReceiptMode;
   },
-  config: LocatorPatchConfig,
+  config: SelectorPatchConfig,
 ): PatchExecutionOptions {
   const profileDefaults = PATCH_PROFILE_DEFAULTS[config.profile];
   const receipt = params.receipt ?? profileDefaults?.receipt ?? "status";
@@ -504,7 +505,7 @@ function resolvePatchExecutionOptions(
     parseOptions: {
       profile: config.profile,
       strictHashRows: config.profile === "hash",
-      hashLocatorsEnabled: receipt === "hash",
+      hashSelectorsEnabled: receipt === "hash",
     },
     receipt,
   };
@@ -771,7 +772,7 @@ async function writeRawRetryPatch(patchText: string): Promise<string> {
 }
 
 async function createRetryPatchPath(): Promise<string> {
-  const directory = join(tmpdir(), "pi-locator-patch");
+  const directory = join(tmpdir(), "pi-selector-patch");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   return join(directory, `${randomUUID()}.patch`);
 }
@@ -845,9 +846,9 @@ function buildPatchToolResult(
   dryRun: boolean,
   receipt: PatchReceiptMode,
 ) {
-  const locatorEfficiency = getPatchLocatorEfficiency(plannedChanges);
-  const locatorWarning = formatLocatorCostWarning(locatorEfficiency);
-  const status = buildPatchStatusDecision(plannedChanges, dryRun, receipt, locatorWarning);
+  const selectorEfficiency = getPatchSelectorEfficiency(plannedChanges);
+  const selectorWarning = formatSelectorCostWarning(selectorEfficiency);
+  const status = buildPatchStatusDecision(plannedChanges, dryRun, receipt, selectorWarning);
   return {
     content: [{ type: "text" as const, text: status.text }],
     details: {
@@ -872,7 +873,7 @@ function buildPatchToolResult(
         visibleLineCount: status.visibleLineCount,
       },
       charEfficiency: getPatchCharEfficiency(plannedChanges),
-      locatorEfficiency,
+      selectorEfficiency,
     },
   };
 }
@@ -958,10 +959,10 @@ function getPatchCharEfficiency(
   return sumPatchEfficiencies(plannedChanges, getFileChangeCharEfficiency);
 }
 
-function getPatchLocatorEfficiency(
+function getPatchSelectorEfficiency(
   plannedChanges: readonly PlannedFileChange[],
 ): PatchCharEfficiency {
-  return sumPatchEfficiencies(plannedChanges, getFileChangeLocatorEfficiency);
+  return sumPatchEfficiencies(plannedChanges, getFileChangeSelectorEfficiency);
 }
 
 function sumPatchEfficiencies(
@@ -1004,7 +1005,7 @@ function getFileChangeCharEfficiency(
   );
 }
 
-function getFileChangeLocatorEfficiency(
+function getFileChangeSelectorEfficiency(
   change: PlannedFileChange,
 ): PatchCharEfficiency {
   if (change.operation !== "update") {
@@ -1014,8 +1015,8 @@ function getFileChangeLocatorEfficiency(
   const hunkAudits = change.applyResult?.hunkAudits ?? [];
   return hunkAudits.reduce(
     (total, hunkAudit) => ({
-      patchChars: total.patchChars + hunkAudit.locatorPatchCharCount,
-      baselineChars: total.baselineChars + hunkAudit.locatorBaselineCharCount,
+      patchChars: total.patchChars + hunkAudit.selectorPatchCharCount,
+      baselineChars: total.baselineChars + hunkAudit.selectorBaselineCharCount,
     }),
     { patchChars: 0, baselineChars: 0 },
   );
@@ -1032,18 +1033,18 @@ function buildPatchStatusDecision(
   plannedChanges: readonly PlannedFileChange[],
   dryRun: boolean,
   receipt: PatchReceiptMode,
-  locatorWarning: string | undefined,
+  selectorWarning: string | undefined,
 ): PatchStatusDecision {
   const visibleText = appendOptionalLine(
     receipt === "hash"
       ? renderPatchHashReceiptDiffs(plannedChanges.map(toDiffInput))
       : renderUniversalPatchStatus(plannedChanges, dryRun),
-    locatorWarning,
+    selectorWarning,
   );
   const visibleLineCount = countRenderedLines(visibleText);
   const overflow = getVisibleOutputOverflow(visibleText, visibleLineCount);
   if (overflow) {
-    const text = appendOptionalLine(renderUniversalPatchStatus(plannedChanges, dryRun), locatorWarning);
+    const text = appendOptionalLine(renderUniversalPatchStatus(plannedChanges, dryRun), selectorWarning);
     return {
       text,
       omitted: true,

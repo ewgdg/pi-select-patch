@@ -10,9 +10,9 @@ const MAX_LIMIT = LLM_VISIBLE_OUTPUT_MAX_LINES;
 const renderBuiltInReadResult = createReadToolDefinition(process.cwd()).renderResult;
 
 type ReadHashRenderArgs = { path?: string; offset?: number; limit?: number };
-type LocatorReadToolName = "read" | "read_hash";
+type SelectorReadToolName = "read" | "read_hash";
 
-function formatReadHashCall(args: ReadHashRenderArgs, theme: Pick<Theme, "fg" | "bold">, toolName: LocatorReadToolName): string {
+function formatReadHashCall(args: ReadHashRenderArgs, theme: Pick<Theme, "fg" | "bold">, toolName: SelectorReadToolName): string {
   const startLine = args.offset ?? 1;
   const endLine = args.limit !== undefined ? startLine + args.limit - 1 : undefined;
   const range =
@@ -22,7 +22,7 @@ function formatReadHashCall(args: ReadHashRenderArgs, theme: Pick<Theme, "fg" | 
   return `${theme.fg("toolTitle", theme.bold(toolName))} ${theme.fg("accent", args.path ?? "")}${range}`;
 }
 
-function createLocatorReadTool(toolName: LocatorReadToolName) {
+function createSelectorReadTool(toolName: SelectorReadToolName) {
   return defineTool({
     name: toolName,
     label: toolName === "read" ? "Read" : "Read Hash",
@@ -73,5 +73,5 @@ function createLocatorReadTool(toolName: LocatorReadToolName) {
   });
 }
 
-export const readHashTool = createLocatorReadTool("read_hash");
-export const hashProfileReadTool = createLocatorReadTool("read");
+export const readHashTool = createSelectorReadTool("read_hash");
+export const hashProfileReadTool = createSelectorReadTool("read");

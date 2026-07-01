@@ -34,7 +34,7 @@ describe("patch parser", () => {
     expect(patch.hunks[0].ops.filter((op) => op.kind === "range").map((op) => op.rangeKind)).toEqual(["context", "delete"]);
   });
 
-  it("parses text ellipsis rows as literal locators", () => {
+  it("parses text ellipsis rows as literal selectors", () => {
     const parsed = parsePatch(["@@", " :...", "-:..."].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -58,7 +58,7 @@ describe("patch parser", () => {
     if (op.kind === "insert") expect(op.content).toBe("a│b");
   });
 
-  it("parses text context/delete locators literally", () => {
+  it("parses text context/delete selectors literally", () => {
     const parsed = parsePatch(["@@", " :ctx text", "-:delete text", " :│starts", "-:│delete pipe", " :  indented"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -71,7 +71,7 @@ describe("patch parser", () => {
   });
 
 
-  it("parses prefix, contains, and suffix text context/delete locators", () => {
+  it("parses prefix, contains, and suffix text context/delete selectors", () => {
     const parsed = parsePatch(["@@", " ^function parse", "-^old value", " *needle value", "-*delete needle", " $);", "-$old suffix"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -84,7 +84,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("parses combined text context/delete locators and normalizes contains", () => {
+  it("parses combined text context/delete selectors and normalizes contains", () => {
     const parsed = parsePatch([
       "@@",
       ' ?{"prefix":"function ","contains":"parse","suffix":" {"}',
@@ -97,7 +97,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects malformed combined text locators", () => {
+  it("rejects malformed combined text selectors", () => {
     for (const selector of [
       ' ?not-json',
       ' ?[]',
@@ -126,16 +126,16 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects empty prefix, contains, and suffix text locators", () => {
-    expect(() => parsePatch("@@\n ^")).toThrow("Line 2: Malformed context prefix locator. Expected non-empty text after ^.");
-    expect(() => parsePatch("@@\n-^" )).toThrow("Line 2: Malformed delete prefix locator. Expected non-empty text after ^.");
-    expect(() => parsePatch("@@\n *")).toThrow("Line 2: Malformed context contains locator. Expected non-empty text after *.");
-    expect(() => parsePatch("@@\n-*")).toThrow("Line 2: Malformed delete contains locator. Expected non-empty text after *.");
-    expect(() => parsePatch("@@\n $")).toThrow("Line 2: Malformed context suffix locator. Expected non-empty text after $.");
-    expect(() => parsePatch("@@\n-$")).toThrow("Line 2: Malformed delete suffix locator. Expected non-empty text after $.");
+  it("rejects empty prefix, contains, and suffix text selectors", () => {
+    expect(() => parsePatch("@@\n ^")).toThrow("Line 2: Malformed context prefix selector. Expected non-empty text after ^.");
+    expect(() => parsePatch("@@\n-^" )).toThrow("Line 2: Malformed delete prefix selector. Expected non-empty text after ^.");
+    expect(() => parsePatch("@@\n *")).toThrow("Line 2: Malformed context contains selector. Expected non-empty text after *.");
+    expect(() => parsePatch("@@\n-*")).toThrow("Line 2: Malformed delete contains selector. Expected non-empty text after *.");
+    expect(() => parsePatch("@@\n $")).toThrow("Line 2: Malformed context suffix selector. Expected non-empty text after $.");
+    expect(() => parsePatch("@@\n-$")).toThrow("Line 2: Malformed delete suffix selector. Expected non-empty text after $.");
   });
 
-  it("parses blank text context/delete locators", () => {
+  it("parses blank text context/delete selectors", () => {
     const parsed = parsePatch(["@@", " :", "-:"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -157,7 +157,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("accepts omitted-space context locator rows", () => {
+  it("accepts omitted-space context selector rows", () => {
     const parsed = parsePatch(["@@", ":literal context", ":", "^foo", "#abc", "*needle", "$tail", '?{"contains":"done"}', "..."].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -173,7 +173,7 @@ describe("patch parser", () => {
     expect(parsed.hunks[0].ops).not.toContainEqual(expect.objectContaining({ unifiedDiff: true }));
   });
 
-  it("parses unified-diff rows when locator markers are missing", () => {
+  it("parses unified-diff rows when selector markers are missing", () => {
     const hash = hashLine("ctx");
     const parsed = parsePatch(["@@", ` ${hash}`, "", `-${hash}`, "+new", " context", "-"].join("\n"));
 
@@ -187,8 +187,8 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("treats hash-prefixed rows as unified-diff text when hash locators are disabled", () => {
-    const parsed = parsePatch(["@@", " #define X", "-#old", "+#new", " :#literal"].join("\n"), undefined, 0, { hashLocatorsEnabled: false });
+  it("treats hash-prefixed rows as unified-diff text when hash selectors are disabled", () => {
+    const parsed = parsePatch(["@@", " #define X", "-#old", "+#new", " :#literal"].join("\n"), undefined, 0, { hashSelectorsEnabled: false });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "#define X", textSelector: "exact", unifiedDiff: true },
@@ -198,12 +198,12 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects bare hash-prefixed rows when hash locators are disabled", () => {
-    expect(() => parsePatch("@@\n#abc", undefined, 0, { hashLocatorsEnabled: false })).toThrow("[E_INVALID_PATCH]");
+  it("rejects bare hash-prefixed rows when hash selectors are disabled", () => {
+    expect(() => parsePatch("@@\n#abc", undefined, 0, { hashSelectorsEnabled: false })).toThrow("[E_INVALID_PATCH]");
   });
 
-  it("keeps hash locator errors strict when hash locators are enabled", () => {
-    expect(() => parsePatch("@@\n #define X", undefined, 0, { hashLocatorsEnabled: true })).toThrow("[E_INVALID_PATCH]");
+  it("keeps hash selector errors strict when hash selectors are enabled", () => {
+    expect(() => parsePatch("@@\n #define X", undefined, 0, { hashSelectorsEnabled: true })).toThrow("[E_INVALID_PATCH]");
   });
 
   it("rejects bare unified-diff context rows", () => {
@@ -234,7 +234,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("parses blank smart locator rows", () => {
+  it("parses blank smart selector rows", () => {
     expect(parsePatch(["@@", " before", "-", " after"].join("\n"), undefined, 0, { profile: "smart" }).hunks[0].ops).toMatchObject([
       { kind: "context", content: "before", textSelector: "exact", smart: true },
       { kind: "delete", content: "", textSelector: "exact", smart: true },
@@ -255,12 +255,12 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects bare context rows and hash locator markers in the hash profile", () => {
+  it("rejects bare context rows and hash selector markers in the hash profile", () => {
     const hash = hashLine("old").slice(0, 3);
 
     expect(() => parsePatch(`@@\n${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed patch operation");
     expect(() => parsePatch(`@@\n#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed patch operation");
-    expect(() => parsePatch(`@@\n-#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed delete hash locator");
+    expect(() => parsePatch(`@@\n-#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed delete hash selector");
   });
 
   it("keeps classic default behavior and rejects malformed hash profile rows", () => {
@@ -281,7 +281,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("rejects text locators and unified-diff rows in strict hash mode", () => {
+  it("rejects text selectors and unified-diff rows in strict hash mode", () => {
     for (const row of [" :text", "^text", " *text", "-~old", " text longer", "-old value"]) {
       expect(() => parsePatch(["@@", row].join("\n"), undefined, 0, { strictHashRows: true })).toThrow("[E_INVALID_PATCH]");
     }
@@ -314,7 +314,7 @@ describe("patch parser", () => {
     expect(() => parsePatch(patch)).toThrow("[E_INVALID_PATCH]");
   });
 
-  it("accepts smart context/delete locators and leaves smart-looking inserts literal", () => {
+  it("accepts smart context/delete selectors and leaves smart-looking inserts literal", () => {
     const parsed = parsePatch(["@@", " ~target text", "~omitted context", "-~old text", "+~literal insert"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
@@ -325,7 +325,7 @@ describe("patch parser", () => {
     ]);
   });
 
-  it("accepts explicit empty smart locators", () => {
+  it("accepts explicit empty smart selectors", () => {
     expect(parsePatch(["@@", " ~", "~", "-~"].join("\n")).hunks[0].ops).toMatchObject([
       { kind: "context", content: "", textSelector: "exact", smart: true },
       { kind: "context", content: "", textSelector: "exact", smart: true },

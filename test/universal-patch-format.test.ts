@@ -86,7 +86,7 @@ describe("universal patch parser", () => {
     expect(() => parsePatchInput(patch)).toThrow("Line 4: Add File body lines must start with +.");
   });
 
-  it("dedents uniformly indented patch input while preserving locator content indentation", () => {
+  it("dedents uniformly indented patch input while preserving selector content indentation", () => {
     const parsed = parsePatchInput(`
       *** Begin Patch
       *** Add File: added.txt
@@ -251,14 +251,14 @@ describe("universal patch parser", () => {
     });
   });
 
-  it("rejects serializing invalid mixed locator operations", () => {
+  it("rejects serializing invalid mixed selector operations", () => {
     expect(() => serializeUniversalPatch([
       {
         kind: "update",
         path: "existing.txt",
         patch: { hunks: [{ ops: [{ kind: "context", hash: hashLine("ctx"), content: "ctx" }] }] }
       }
-    ])).toThrow("Hash+text locators are not supported");
+    ])).toThrow("Hash+text selectors are not supported");
 
     expect(() => serializeUniversalPatch([
       {
@@ -266,7 +266,7 @@ describe("universal patch parser", () => {
         path: "existing.txt",
         patch: { hunks: [{ ops: [{ kind: "context", hash: hashLine("ctx"), combinedSelector: { contains: ["ctx"] } }] }] }
       }
-    ])).toThrow("Hash+text locators are not supported");
+    ])).toThrow("Hash+text selectors are not supported");
 
     expect(() => serializeUniversalPatch([
       {
@@ -274,7 +274,7 @@ describe("universal patch parser", () => {
         path: "existing.txt",
         patch: { hunks: [{ ops: [{ kind: "context", content: "ctx", combinedSelector: { contains: ["ctx"] } }] }] }
       }
-    ])).toThrow("Mixed text locators are not supported");
+    ])).toThrow("Mixed text selectors are not supported");
 
     expect(() => serializeUniversalPatch([
       {
@@ -285,7 +285,7 @@ describe("universal patch parser", () => {
     ])).toThrow("requires at least one");
   });
 
-  it("round-trips smart locators in universal patch serialization", () => {
+  it("round-trips smart selectors in universal patch serialization", () => {
     const source = [
       "*** Begin Patch",
       "*** Update File: existing.txt",
@@ -310,7 +310,7 @@ describe("universal patch parser", () => {
     });
   });
 
-  it("serializes empty smart locators", () => {
+  it("serializes empty smart selectors", () => {
     const source = [
       "*** Begin Patch",
       "*** Update File: existing.txt",

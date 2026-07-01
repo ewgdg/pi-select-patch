@@ -60,13 +60,13 @@ export interface Patch {
 export type PatchParseProfile = "classic" | "smart" | "hash";
 
 export interface ParsePatchOptions {
-  hashLocatorsEnabled?: boolean;
+  hashSelectorsEnabled?: boolean;
   profile?: PatchParseProfile;
   strictHashRows?: boolean;
 }
 
 interface NormalizedParsePatchOptions {
-  hashLocatorsEnabled: boolean;
+  hashSelectorsEnabled: boolean;
   profile: PatchParseProfile;
   strictHashRows: boolean;
 }
@@ -134,7 +134,7 @@ function normalizeParsePatchOptions(options: ParsePatchOptions): NormalizedParse
     throw new InvalidPatchError(`Unsupported patch parse profile: ${String(profile)}.`);
   }
   return {
-    hashLocatorsEnabled: options.hashLocatorsEnabled ?? true,
+    hashSelectorsEnabled: options.hashSelectorsEnabled ?? true,
     profile,
     strictHashRows: options.strictHashRows ?? profile === "hash"
   };
@@ -154,10 +154,10 @@ function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: n
   if (options.profile === "smart") {
     return parseSmartProfileRow(line, inputLine);
   }
-  return parseClassicMarkerfulRow(line, hashFn, inputLine, options.hashLocatorsEnabled);
+  return parseClassicMarkerfulRow(line, hashFn, inputLine, options.hashSelectorsEnabled);
 }
 
-function parseClassicMarkerfulRow(line: string, hashFn: HashFunction, inputLine: number, hashLocatorsEnabled: boolean): PatchOp {
+function parseClassicMarkerfulRow(line: string, hashFn: HashFunction, inputLine: number, hashSelectorsEnabled: boolean): PatchOp {
   if (line === "") {
     return parseUnifiedDiffOp(line, hashFn, inputLine);
   }
@@ -167,9 +167,9 @@ function parseClassicMarkerfulRow(line: string, hashFn: HashFunction, inputLine:
     if (kind === "context" && selector === "") {
       return parseSelectorPatchOp(kind, selector, line, inputLine);
     }
-    return hasLocatorMarker(selector, hashLocatorsEnabled) ? parseSelectorPatchOp(kind, selector, line, inputLine) : parseUnifiedDiffOp(line, hashFn, inputLine);
+    return hasSelectorMarker(selector, hashSelectorsEnabled) ? parseSelectorPatchOp(kind, selector, line, inputLine) : parseUnifiedDiffOp(line, hashFn, inputLine);
   }
-  if (hasLocatorMarker(line, hashLocatorsEnabled)) {
+  if (hasSelectorMarker(line, hashSelectorsEnabled)) {
     return parseSelectorPatchOp("context", line, line, inputLine);
   }
   return parsePatchOp(line, hashFn, inputLine);
@@ -243,8 +243,8 @@ function parseHunkHeader(line: string, inputLine: number): HunkAnchorHint | unde
   return endLine === undefined ? { line: hintLine } : { line: hintLine, endLine };
 }
 
-function hasLocatorMarker(selector: string, hashLocatorsEnabled: boolean): boolean {
-  return selector === "..." || selector.startsWith(":") || (hashLocatorsEnabled && selector.startsWith("#")) || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$") || selector.startsWith("~");
+function hasSelectorMarker(selector: string, hashSelectorsEnabled: boolean): boolean {
+  return selector === "..." || selector.startsWith(":") || (hashSelectorsEnabled && selector.startsWith("#")) || selector.startsWith("^") || selector.startsWith("*") || selector.startsWith("?") || selector.startsWith("$") || selector.startsWith("~");
 }
 
 function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
@@ -262,7 +262,7 @@ function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: numbe
     return { kind: "delete", content: line.slice(1), textSelector: "exact", unifiedDiff: true, inputLine, authoredCharCount: line.length };
   }
 
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or locator row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or selector row.", { inputLine });
 }
 
 function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
@@ -277,7 +277,7 @@ function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): Pa
     return parseSelectorPatchOp("delete", line.slice(1), line, inputLine);
   }
 
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or locator row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or selector row.", { inputLine });
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {
@@ -317,19 +317,19 @@ function parseSmartPatchOp(kind: MatchPatchOpKind, content: string, _line: strin
 }
 
 function throwRawTextSelectorError(kind: MatchPatchOpKind, _selector: string, _line: string, inputLine: number): never {
-  throw new InvalidPatchError(`Raw ${kind} row. Add a locator marker.`, { inputLine });
+  throw new InvalidPatchError(`Raw ${kind} row. Add a selector marker.`, { inputLine });
 }
 
 function parsePrefixPatchOp(kind: MatchPatchOpKind, content: string, _line: string, inputLine: number): MatchPatchOp {
   if (content.length === 0) {
-    throw new InvalidPatchError(`Malformed ${kind} prefix locator. Expected non-empty text after ^.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} prefix selector. Expected non-empty text after ^.`, { inputLine });
   }
   return { kind, content, textSelector: "prefix", inputLine, authoredCharCount: _line.length };
 }
 
 function parseContainsPatchOp(kind: MatchPatchOpKind, content: string, _line: string, inputLine: number): MatchPatchOp {
   if (content.length === 0) {
-    throw new InvalidPatchError(`Malformed ${kind} contains locator. Expected non-empty text after *.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} contains selector. Expected non-empty text after *.`, { inputLine });
   }
   return { kind, content, textSelector: "contains", inputLine, authoredCharCount: _line.length };
 }
@@ -339,11 +339,11 @@ function parseCombinedPatchOp(kind: MatchPatchOpKind, jsonText: string, _line: s
   try {
     value = JSON.parse(jsonText);
   } catch {
-    throw new InvalidPatchError(`Malformed ${kind} combined locator. Expected valid JSON after ?.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} combined selector. Expected valid JSON after ?.`, { inputLine });
   }
 
   try {
-    return { kind, combinedSelector: normalizeCombinedTextSelector(value, `Malformed ${kind} combined locator. Combined selector`), inputLine, authoredCharCount: _line.length };
+    return { kind, combinedSelector: normalizeCombinedTextSelector(value, `Malformed ${kind} combined selector. Combined selector`), inputLine, authoredCharCount: _line.length };
   } catch (error) {
     throw annotatePatchErrorLocation(error, { inputLine });
   }
@@ -400,14 +400,14 @@ function parseOptionalCombinedContains(value: unknown, description: string): str
 
 function parseSuffixPatchOp(kind: MatchPatchOpKind, content: string, _line: string, inputLine: number): MatchPatchOp {
   if (content.length === 0) {
-    throw new InvalidPatchError(`Malformed ${kind} suffix locator. Expected non-empty text after $.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} suffix selector. Expected non-empty text after $.`, { inputLine });
   }
   return { kind, content, textSelector: "suffix", inputLine, authoredCharCount: _line.length };
 }
 
 function parseHashPatchOp(kind: MatchPatchOpKind, hash: string, _line: string, inputLine: number): MatchPatchOp {
   if (!isHash(hash)) {
-    throw new InvalidPatchError(`Malformed ${kind} hash locator. Expected 1 to 4 base64url characters.`, { inputLine });
+    throw new InvalidPatchError(`Malformed ${kind} hash selector. Expected 1 to 4 base64url characters.`, { inputLine });
   }
   return { kind, hash, inputLine, authoredCharCount: _line.length };
 }

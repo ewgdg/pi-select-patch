@@ -22,7 +22,7 @@ describe("read format", () => {
     expect(parsed).toEqual({ hash: hashLine("a│b"), content: "a│b" });
   });
 
-  it("rejects malformed locators", () => {
+  it("rejects malformed selectors", () => {
     expect(() => parseHashLine("abcde│bad width")).toThrow("[E_INVALID_PATCH]");
     expect(() => parseHashLine("abcd missing separator")).toThrow("[E_INVALID_PATCH]");
   });

@@ -2,20 +2,20 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export interface LocatorPatchConfig {
-  profile: LocatorPatchProfile;
+export interface SelectorPatchConfig {
+  profile: SelectorPatchProfile;
 }
 
-export type LocatorPatchProfile = "classic" | "smart" | "hash";
+export type SelectorPatchProfile = "classic" | "smart" | "hash";
 
-const ENV_PROFILE = "PI_LOCATOR_PATCH_PROFILE";
+const ENV_PROFILE = "PI_SELECTOR_PATCH_PROFILE";
 const EXTENSION_CONFIG_PATH = [
   "extensions",
-  "pi-locator-patch",
+  "pi-selector-patch",
   "config.json",
 ] as const;
 
-export async function readLocatorPatchConfig(): Promise<LocatorPatchConfig> {
+export async function readSelectorPatchConfig(): Promise<SelectorPatchConfig> {
   const globalConfig = await readConfigJson(globalConfigPath());
   const explicitProfile = readEnvProfile() ?? readProfile(globalConfig);
   const profile = explicitProfile ?? "classic";
@@ -37,16 +37,16 @@ async function readConfigJson(path: string): Promise<unknown> {
   }
 }
 
-function readProfile(config: unknown): LocatorPatchProfile | undefined {
+function readProfile(config: unknown): SelectorPatchProfile | undefined {
   if (!isObject(config)) return undefined;
   return parseProfile(config.profile);
 }
 
-function readEnvProfile(): LocatorPatchProfile | undefined {
+function readEnvProfile(): SelectorPatchProfile | undefined {
   return parseProfile(process.env[ENV_PROFILE]);
 }
 
-function parseProfile(value: unknown): LocatorPatchProfile | undefined {
+function parseProfile(value: unknown): SelectorPatchProfile | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().toLowerCase();
   if (

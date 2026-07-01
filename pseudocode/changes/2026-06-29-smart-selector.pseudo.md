@@ -4,14 +4,14 @@ affects:
   - src/apply.ts
   - src/universal-patch-format.ts
   - src/tools/patch-render.ts
-  - src/tools/locator-patch.ts
+  - src/tools/selector-patch.ts
   - README.md
   - docs/patch-format.md
 ---
 
-# Smart locator opt-in pseudocode
+# Smart selector opt-in pseudocode
 
-Goal: add explicit `~` text locator for context/delete rows only. Existing locator rows and unified-diff rows keep current behavior. Insert rows beginning `+~` stay literal insert content.
+Goal: add explicit `~` text selector for context/delete rows only. Existing selector rows and unified-diff rows keep current behavior. Insert rows beginning `+~` stay literal insert content.
 
 ## Parse
 
@@ -21,8 +21,8 @@ For each hunk operation row:
   - content = text after `~`.
   - Reject when content is empty.
   - Return match op with `smart: true`, `content`, and exact text selector as authored base form.
-- If row itself starts with `~`: parse as omitted-space context smart locator.
-- Otherwise use existing locator/unified-diff parsing unchanged.
+- If row itself starts with `~`: parse as omitted-space context smart selector.
+- Otherwise use existing selector/unified-diff parsing unchanged.
 
 ## Apply
 
@@ -30,7 +30,7 @@ For each hunk:
 - Validate hunk as today.
 - If hunk has no smart match ops: run existing match flow unchanged.
 - If hunk has any smart match op:
-  - Keep fixed explicit locators on their normal predicate.
+  - Keep fixed explicit selectors on their normal predicate.
   - For each candidate hunk span/assignment, each smart row independently resolves against its assigned target line using the first matching line-level kind: exact, prefix/suffix, contains, then token-subsequence.
   - Prefix/suffix have the same rank for dominance; record the actual resolved `prefix` or `suffix` kind for audit.
   - Collect whole-hunk candidates using same contiguous/sparse, anchor, range, and touched-line behavior as existing apply. Do not stop at the first weaker candidate.
@@ -51,8 +51,8 @@ For each hunk:
 
 ## Audit/render/serialization/docs
 
-- Match pattern can keep `~query` so authors see smart locators round-trip.
+- Match pattern can keep `~query` so authors see smart selectors round-trip.
 - Matcher kinds expose each smart row's resolved kind: `exact`, `prefix`, `suffix`, `contains`, or `subsequence`.
 - Universal serialization writes smart match ops back as ` ~query` or `-~query`.
 - Renderer stats count `subsequence` from matcher kinds.
-- Docs describe `~` as opt-in smart locator and list independent per-row resolution, dominance, ambiguity, and stale rules.
+- Docs describe `~` as opt-in smart selector and list independent per-row resolution, dominance, ambiguity, and stale rules.

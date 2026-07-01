@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { formatLocatorCostWarning, type PatchCharEfficiency } from "../locator-efficiency.js";
+import { formatSelectorCostWarning, type PatchCharEfficiency } from "../selector-efficiency.js";
 
 export const COLLAPSED_RESULT_DIFF_MAX_LINES = 16;
 export const EXPANDED_RESULT_DIFF_MAX_LINES = 200;
@@ -104,11 +104,11 @@ export function getPatchCharEfficiency(details: unknown): PatchCharEfficiency | 
   return getPatchEfficiency(details, "charEfficiency");
 }
 
-export function getPatchLocatorEfficiency(details: unknown): PatchCharEfficiency | undefined {
-  return getPatchEfficiency(details, "locatorEfficiency");
+export function getPatchSelectorEfficiency(details: unknown): PatchCharEfficiency | undefined {
+  return getPatchEfficiency(details, "selectorEfficiency");
 }
 
-function getPatchEfficiency(details: unknown, key: "charEfficiency" | "locatorEfficiency"): PatchCharEfficiency | undefined {
+function getPatchEfficiency(details: unknown, key: "charEfficiency" | "selectorEfficiency"): PatchCharEfficiency | undefined {
   if (!isRecord(details) || !isRecord(details[key])) {
     return undefined;
   }
@@ -245,8 +245,8 @@ export function buildPatchResultRenderText(options: {
   const renderedDiff = formatPatchResultDiff(diff, expanded, theme);
   const matcherStatsFooter = formatPatchMatcherStatsFooter(getPatchMatcherStats(details), theme);
   const charEfficiencyFooter = formatPatchCharEfficiencyFooter(getPatchCharEfficiency(details), theme);
-  const locatorCostWarning = formatPatchLocatorCostWarning(getPatchLocatorEfficiency(details), theme);
-  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, charEfficiencyFooter, locatorCostWarning];
+  const selectorCostWarning = formatPatchSelectorCostWarning(getPatchSelectorEfficiency(details), theme);
+  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, charEfficiencyFooter, selectorCostWarning];
 
   return body.filter((part): part is string => Boolean(part)).join("\n");
 }
@@ -329,11 +329,11 @@ function formatPatchCharEfficiencyFooter(efficiency: PatchCharEfficiency | undef
   return theme.fg("muted", `Patch efficiency: ${patchChars}/${baselineChars} chars vs baseline (${formatPercent(ratio)}, saved ${formatPercent(saved)})`);
 }
 
-function formatPatchLocatorCostWarning(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
+function formatPatchSelectorCostWarning(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
   if (!efficiency) {
     return undefined;
   }
-  const warning = formatLocatorCostWarning(efficiency);
+  const warning = formatSelectorCostWarning(efficiency);
   return warning ? theme.fg("warning", warning) : undefined;
 }
 

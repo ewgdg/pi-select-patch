@@ -1,6 +1,6 @@
 ---
 affects:
-  - src/tools/locator-patch.ts
+  - src/tools/selector-patch.ts
   - README.md
   - docs/patch-format.md
 ---
@@ -9,24 +9,24 @@ affects:
 
 ## Intent
 
-Keep hash profile strict by default, but let an explicit per-call `markerless_locator` override row parsing.
+Keep hash profile strict by default, but let an explicit per-call `markerless_selector` override row parsing.
 
 ## Behavior
 
 ```pseudo
 when resolving patch execution options:
   start from configured profile defaults
-  if markerless_locator is supplied:
-    use it as the resolved markerless locator
+  if markerless_selector is supplied:
+    use it as the resolved markerless selector
   strict hash rows are enabled only when:
     configured profile is hash
-    and markerless_locator was not supplied
+    and markerless_selector was not supplied
 
-with configured profile hash and no markerless_locator override:
+with configured profile hash and no markerless_selector override:
   update hunk rows remain strict hash-only
 
-with configured profile hash and markerless_locator override:
-  parse markerless rows using the supplied markerless_locator
-  keep hash locators enabled because the configured profile is still hash
+with configured profile hash and markerless_selector override:
+  parse markerless rows using the supplied markerless_selector
+  keep hash selectors enabled because the configured profile is still hash
   receipt default remains hash unless receipt is separately overridden
 ```
