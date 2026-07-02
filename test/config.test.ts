@@ -47,7 +47,7 @@ describe("select patch config", () => {
     await makeAgentDir();
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
-      profile: "classic",
+      profile: "smart",
     });
   });
 

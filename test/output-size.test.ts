@@ -8,7 +8,9 @@ import {
   LLM_VISIBLE_OUTPUT_MAX_BYTES,
   LLM_VISIBLE_OUTPUT_MAX_LINES,
 } from "../src/output-size.js";
-import { patchTool } from "../src/tools/selector-patch.js";
+import { createPatchTool } from "../src/tools/selector-patch.js";
+
+const patchTool = createPatchTool("smart");
 import { readHashTool } from "../src/tools/selector-read.js";
 
 const makeTempDir = async () => {
@@ -81,7 +83,7 @@ describe("tool output size guards", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      "-:old",
+      "-old",
       row("+", hugeReplacement),
       "*** End Patch",
     ].join("\n");
@@ -98,7 +100,7 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
+        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain(hugeReplacement);
@@ -114,7 +116,7 @@ describe("tool output size guards", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      "-:old",
+      "-old",
       ...insertedRows.map((content) => row("+", content)),
       "*** End Patch",
     ].join("\n");
@@ -131,7 +133,7 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
+        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(insertedRows.join("\n"));

@@ -8,7 +8,9 @@ import {
   readExistingTextFile,
   writeTextFileAtomically,
 } from "../src/api.js";
-import { patchTool } from "../src/tools/selector-patch.js";
+import { createPatchTool } from "../src/tools/selector-patch.js";
+
+const patchTool = createPatchTool("smart");
 
 const makeTempDir = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-"));
@@ -62,7 +64,7 @@ describe("patch tool", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      "-:old",
+      "-old",
       row("+", "new"),
       "*** End Patch",
     ].join("\n");
@@ -84,7 +86,7 @@ describe("patch tool", () => {
       [
         "*** Update File: file.txt",
         "Validated",
-        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
+        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("old");
@@ -98,7 +100,7 @@ describe("patch tool", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      "-:old",
+      "-old",
       row("+", "new"),
       "*** End Patch",
     ].join("\n");

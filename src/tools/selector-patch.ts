@@ -328,16 +328,17 @@ const PATCH_PROFILE_DEFAULTS: Record<
   hash: { receipt: "hash" },
 };
 
-export const patchTool = defineTool({
-  name: "patch",
-  label: "Select Patch",
-  description:
-    "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
-  promptSnippet:
-    "Use this tool for patching. Pick the selector costing the least.",
-  promptGuidelines: buildPatchPromptGuidelines("classic"),
-  parameters: buildPatchToolParameters("classic"),
-  async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+export function createPatchTool(profile: SelectorPatchProfile) {
+  return defineTool({
+    name: "patch",
+    label: "Select Patch",
+    description:
+      "Token-efficient tool for editing files with multi-file-capable add/update/delete patches.",
+    promptSnippet:
+      "Use this tool for patching. Pick the selector costing the least.",
+    promptGuidelines: buildPatchPromptGuidelines(profile),
+    parameters: buildPatchToolParameters(profile),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
     if (signal?.aborted) {
       throw new Error("Cancelled");
     }
@@ -401,8 +402,8 @@ export const patchTool = defineTool({
       false,
       executionOptions.receipt,
     );
-  },
-  renderCall(_args, theme, context) {
+    },
+    renderCall(_args, theme, context) {
     return new Text(
       buildPatchCallRenderText({
         input: context.args,
@@ -413,8 +414,8 @@ export const patchTool = defineTool({
       0,
       0,
     );
-  },
-  renderResult(result, { expanded, isPartial }, theme, context) {
+    },
+    renderResult(result, { expanded, isPartial }, theme, context) {
     const resultText = getPatchResultText(result);
     return new Text(
       buildPatchResultRenderText({
@@ -429,15 +430,10 @@ export const patchTool = defineTool({
       0,
       0,
     );
-  },
-});
-
-export function setPatchToolProfileGuideline(
-  profile: SelectorPatchProfile,
-): void {
-  patchTool.promptGuidelines = buildPatchPromptGuidelines(profile);
-  patchTool.parameters = buildPatchToolParameters(profile);
+    },
+  });
 }
+
 
 function buildPatchToolParameters(profile: SelectorPatchProfile) {
   return Type.Object(

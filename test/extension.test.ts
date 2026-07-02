@@ -3,16 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import piSelectPatch from "../src/index.js";
-import { patchTool } from "../src/tools/selector-patch.js";
 
 describe("extension registration", () => {
-  it("keeps built-in read by default while hiding read_hash/write/edit", async () => {
+  it("uses smart profile by default while hiding read_hash/write/edit", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
     delete process.env.PI_SELECT_PATCH_PROFILE;
     try {
-      const registeredTools: string[] = [];
+      const registeredTools: RegisteredTool[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = [
@@ -24,8 +23,8 @@ describe("extension registration", () => {
       ];
 
       piSelectPatch({
-        registerTool(tool: { name: string }) {
-          registeredTools.push(tool.name);
+        registerTool(tool: RegisteredTool) {
+          registeredTools.push(tool);
         },
         on(
           event: string,
@@ -43,22 +42,23 @@ describe("extension registration", () => {
         },
       } as never);
 
-      expect(registeredTools).toEqual(["patch"]);
+      expect(registeredToolNames(registeredTools)).toEqual([]);
 
       await sessionStart?.(
         {},
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
+      expect(registeredToolNames(registeredTools)).toEqual(["patch"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
-      expect(patchTool.promptGuidelines).toHaveLength(1);
-      expect(patchTool.promptGuidelines?.join("\n")).toContain(
-        "classic profile active",
+      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
+        "smart profile active",
       );
-      expect(patchParameterDescription()).toContain("Hunk Match: Classic Profile");
-      expect(patchParameterNames()).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
       expect(activeTools).not.toContain("write");
       expect(activeTools).not.toContain("edit");
       expect(activeTools).not.toContain("selector_read");
@@ -73,14 +73,14 @@ describe("extension registration", () => {
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_SELECT_PATCH_PROFILE = "smart";
     try {
-      const registeredTools: string[] = [];
+      const registeredTools: RegisteredTool[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
       piSelectPatch({
-        registerTool(tool: { name: string }) {
-          registeredTools.push(tool.name);
+        registerTool(tool: RegisteredTool) {
+          registeredTools.push(tool);
         },
         on(
           event: string,
@@ -101,17 +101,17 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredTools).not.toContain("read");
+      expect(registeredToolNames(registeredTools)).toEqual(["patch"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
-      expect(patchTool.promptGuidelines).toHaveLength(1);
-      expect(patchTool.promptGuidelines?.join("\n")).toContain(
+      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "smart profile active",
       );
-      expect(patchParameterDescription()).toContain("Hunk Match: Smart Profile");
-      expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames()).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
+      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
     } finally {
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
@@ -121,14 +121,14 @@ describe("extension registration", () => {
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_SELECT_PATCH_PROFILE = "hash";
     try {
-      const registeredTools: string[] = [];
+      const registeredTools: RegisteredTool[] = [];
       let sessionStart:
         ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
       let activeTools = ["read", "read_hash", "edit", "write"];
 
       piSelectPatch({
-        registerTool(tool: { name: string }) {
-          registeredTools.push(tool.name);
+        registerTool(tool: RegisteredTool) {
+          registeredTools.push(tool);
         },
         on(
           event: string,
@@ -149,17 +149,17 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredTools).toContain("read");
+      expect(registeredToolNames(registeredTools)).toEqual(["patch", "read"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
-      expect(patchTool.promptGuidelines).toHaveLength(1);
-      expect(patchTool.promptGuidelines?.join("\n")).toContain(
+      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "Hash profile active",
       );
-      expect(patchParameterDescription()).toContain("Hunk Match: Hash Profile");
-      expect(patchParameterDescription()).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames()).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Hash Profile");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
+      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
     } finally {
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
@@ -171,14 +171,30 @@ function restoreEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 
-function patchParameterDescription(): string {
-  const parameters = patchTool.parameters as {
+interface RegisteredTool {
+  name: string;
+  promptGuidelines?: string[];
+  parameters?: unknown;
+}
+
+function registeredToolNames(tools: RegisteredTool[]): string[] {
+  return tools.map((tool) => tool.name);
+}
+
+function registeredPatchTool(tools: RegisteredTool[]): RegisteredTool {
+  const tool = tools.find((candidate) => candidate.name === "patch");
+  if (!tool) throw new Error("patch tool was not registered");
+  return tool;
+}
+
+function patchParameterDescription(tool: RegisteredTool): string {
+  const parameters = tool.parameters as {
     properties: { patch: { description?: string } };
   };
   return parameters.properties.patch.description ?? "";
 }
 
-function patchParameterNames(): string[] {
-  const parameters = patchTool.parameters as { properties: Record<string, unknown> };
+function patchParameterNames(tool: RegisteredTool): string[] {
+  const parameters = tool.parameters as { properties: Record<string, unknown> };
   return Object.keys(parameters.properties);
 }

@@ -10,9 +10,9 @@ On session start, the extension removes mutable built-in tools (`edit`, `write`)
 
 ## Profiles
 
-Profiles control session defaults and read registration. `classic` keeps built-in `read` and exact/status patch defaults. `smart` keeps built-in `read` and makes unified-diff selector text smart by default. `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
+Profiles control session defaults and read registration. Default is `smart`: built-in `read` stays active and unified-diff selector text is smart by default. `classic` keeps built-in `read` and exact/status patch defaults. `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
 
-Enable in `~/.pi/agent/extensions/pi-select-patch/config.json`:
+Override in `~/.pi/agent/extensions/pi-select-patch/config.json`:
 
 ```json
 {
@@ -98,7 +98,7 @@ Selectors:
 - `~<text>` opt-in smart text selector for context/delete rows.
 - `...` range between surrounding matchers: ` ...` preserves, `-...` deletes.
 
-Hash prefix selector `#<hash>` is enabled by `receipt: "hash"`. Configured `profile: "hash"` uses hash selectors after unified-diff operators instead: ` <hash>` for context and `-<hash>` for delete. Hashes are 1 to 4 base64url characters, with visible width chosen from line entropy. In default classic/status mode, `#` is not a selector marker; ` #define X` and `-#old` are unified-diff exact text rows. Use text selectors when content predicates are clearer.
+In classic profile, hash prefix selector `#<hash>` is enabled by `receipt: "hash"`. Configured `profile: "hash"` uses bare hash selectors after unified-diff operators instead: ` <hash>` for context and `-<hash>` for delete. Hashes are 1 to 4 base64url characters, with visible width chosen from line entropy. In default smart/status mode, `#` is literal smart selector text. Use text selectors when content predicates are clearer.
 In classic profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
 
 Classic profile explicit smart selectors use ` ~target text` or `~target text` for context, `-~old text` for delete. Configured `profile: "smart"` makes unified-diff context/delete selector text smart; marker-looking text like ` ~target` is literal smart context selector text. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, then whitespace token-subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Broad prefix/suffix/contains matches require useful nonblank alphanumeric text; token-subsequence also needs at least two query tokens.

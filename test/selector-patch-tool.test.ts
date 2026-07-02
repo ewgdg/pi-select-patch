@@ -3,12 +3,20 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hashLine, parseText } from "../src/api.js";
-import { patchTool } from "../src/tools/selector-patch.js";
+import { createPatchTool } from "../src/tools/selector-patch.js";
+
+const patchTool = createPatchTool("smart");
 
 async function makePlainTempDir() {
   const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-"));
   process.env.PI_CODING_AGENT_DIR = join(dir, "agent");
   delete process.env.PI_SELECT_PATCH_PROFILE;
+  return dir;
+}
+
+async function makeClassicTempDir() {
+  const dir = await makePlainTempDir();
+  process.env.PI_SELECT_PATCH_PROFILE = "classic";
   return dir;
 }
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -92,7 +100,7 @@ async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
 }
 
 async function patchFile(initialText: string, diff: string, path = "file.txt") {
-  const dir = await makePlainTempDir();
+  const dir = await makeClassicTempDir();
   const file = join(dir, path);
   await writeFile(file, initialText);
   const result = await patchTool.execute(
@@ -145,9 +153,9 @@ describe("patch visible status", () => {
     const description = patchParameterDescription();
 
     expect(description).toContain("<description>\nInline patch text.");
-    expect(description).toContain("### Hunk Match: Classic Profile");
-    expect(description).toContain("<content>\naaaaaaaaaab\naaaaacaaaaa\nbbbbbbbbbba\n</content>");
-    expect(description).toContain("@@\n :before\n :\n-:\n :after\n+\n</patch>");
+    expect(description).toContain("### Hunk Match: Smart Profile");
+    expect(description).toContain("<file_content>\nThis is a very long long long stable anchor\n</file_content>");
+    expect(description).toContain("@@\n a long anchor\n+new line\n</patch>");
     expect(description).not.toContain("<policy>");
     expect(description).not.toContain("markerless_selector");
   });
@@ -157,7 +165,7 @@ describe("patch visible status", () => {
     const guideline = patchTool.promptGuidelines?.[0] ?? "";
 
     expect(guideline).toContain("<patch_tool_policy>");
-    expect(guideline).toContain("classic profile active");
+    expect(guideline).toContain("smart profile active");
     expect(guideline).toContain("Token efficiency is the highest priority");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).toContain("</patch_tool_policy>");
@@ -198,7 +206,7 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: file.txt",
       "@@",
-      "-:old",
+      "-old",
       row("+", "new"),
       "*** End Patch",
     ].join("\n");
@@ -215,13 +223,13 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
+        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
   });
 
-  it("treats hash-prefixed update rows as unified-diff text by default", async () => {
+  it("treats hash-prefixed update rows as smart text by default", async () => {
     const dir = await makePlainTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "#define X\n#old\n#literal");
@@ -232,7 +240,7 @@ describe("patch visible status", () => {
       " #define X",
       "-#old",
       "+#new",
-      " :#literal",
+      " #literal",
       "*** End Patch",
     ].join("\n");
 
@@ -248,7 +256,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 104.2% of baseline. Use shorter selectors or ... ranges.",
+        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(
@@ -514,7 +522,7 @@ describe("patch visible status", () => {
   });
 
   it("applies update hunks with text-only selectors", async () => {
-    const diff = ["@@", " :a", "-:old", "+new", " :z"].join("\n");
+    const diff = ["@@", " :a", "-old", "+new", " :z"].join("\n");
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
@@ -637,9 +645,9 @@ describe("patch visible status", () => {
       "*** Begin Patch",
       "*** Update File: range.txt",
       "@@",
-      " ^a",
+      " a",
       "-...",
-      " ^d",
+      " d",
       "*** End Patch",
     ].join("\n");
     const rangeResult = await patchTool.execute(
@@ -659,7 +667,7 @@ describe("patch visible status", () => {
       baselineChars: 5,
     });
     expect(detailsCharEfficiency(rangeResult)).toEqual({
-      patchChars: 10,
+      patchChars: 8,
       baselineChars: 8,
     });
     expect(detailsSelectorEfficiency(addResult)).toEqual({
@@ -671,7 +679,7 @@ describe("patch visible status", () => {
       baselineChars: 0,
     });
     expect(detailsSelectorEfficiency(rangeResult)).toEqual({
-      patchChars: 10,
+      patchChars: 8,
       baselineChars: 8,
     });
     await expect(readFile(join(rangeDir, "range.txt"), "utf8")).resolves.toBe(

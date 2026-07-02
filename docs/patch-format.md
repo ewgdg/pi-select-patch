@@ -10,7 +10,7 @@ HASH│content
 
 Every line includes a visible hash. Width is entropy-based: entropy `< 4` shows 1 char, `< 10` shows 2 chars, `< 24` shows 3 chars, otherwise 4. `HASH` is the first 1 to 4 characters of the SHA-256 based full line hash. Line terminators are excluded. Duplicate content produces same full hash and same visible prefix.
 
-Profiles control session defaults and read registration. Set `profile: "classic" | "smart" | "hash"` in `~/.pi/agent/extensions/pi-select-patch/config.json`, or use `PI_SELECT_PATCH_PROFILE`. `classic` keeps built-in `read` and exact/status patch defaults; `smart` keeps built-in `read` and smart/status patch defaults; `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
+Profiles control session defaults and read registration. Set `profile: "classic" | "smart" | "hash"` in `~/.pi/agent/extensions/pi-select-patch/config.json`, or use `PI_SELECT_PATCH_PROFILE`. Default is `smart`: built-in `read` stays active with smart/status patch defaults. `classic` keeps built-in `read` and exact/status patch defaults; `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
 
 Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline convention (`LF`, `CRLF`, or `CR`) and final-newline state are preserved on update write. Empty file has zero logical lines.
 
@@ -172,4 +172,4 @@ When patch execution fails, parser errors include an input line number. Pi TUI r
 
 ## Collision risk
 
-Visible hash selectors expose 6 bits per character: 6, 12, 18, or 24 bits for 1- to 4-character hashes. Collisions are accepted behavior. Hash-only selectors match by hash prefix only and are parsed as explicit markerful selectors only when hash selectors are enabled by `receipt: "hash"`; configured `profile: "hash"` uses hash selectors after unified-diff operators. Malformed hash selectors fail instead of falling back to unified-diff. Use text-only selectors when content predicates are clearer. Use hash-line `read` under `profile: "hash"`, or prior hash receipts, to retrieve current target hashes after apply.
+Visible hash selectors expose 6 bits per character: 6, 12, 18, or 24 bits for 1- to 4-character hashes. Collisions are accepted behavior. Hash-only selectors match by hash prefix only. Classic profile parses `#<hash>` marker selectors when hash selectors are enabled by `receipt: "hash"`; configured `profile: "hash"` uses bare hash selectors after unified-diff operators. Malformed hash selectors fail instead of falling back to unified-diff. Use text-only selectors when content predicates are clearer. Use hash-line `read` under `profile: "hash"`, or prior hash receipts, to retrieve current target hashes after apply.

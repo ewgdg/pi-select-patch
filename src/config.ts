@@ -8,6 +8,8 @@ export interface SelectorPatchConfig {
 
 export type SelectorPatchProfile = "classic" | "smart" | "hash";
 
+export const DEFAULT_PROFILE: SelectorPatchProfile = "smart";
+
 const ENV_PROFILE = "PI_SELECT_PATCH_PROFILE";
 const EXTENSION_CONFIG_PATH = [
   "extensions",
@@ -18,7 +20,7 @@ const EXTENSION_CONFIG_PATH = [
 export async function readSelectorPatchConfig(): Promise<SelectorPatchConfig> {
   const globalConfig = await readConfigJson(globalConfigPath());
   const explicitProfile = readEnvProfile() ?? readProfile(globalConfig);
-  const profile = explicitProfile ?? "classic";
+  const profile = explicitProfile ?? DEFAULT_PROFILE;
   return { profile };
 }
 
