@@ -3,12 +3,12 @@ export interface PatchCharEfficiency {
   baselineChars: number;
 }
 
-export function formatSelectorCostWarning(efficiency: PatchCharEfficiency): string | undefined {
+export function formatSelectorCost(efficiency: PatchCharEfficiency): string | undefined {
   const ratio = getSelectorCostRatioPercent(efficiency);
-  if (ratio === undefined || ratio <= 50) {
+  if (ratio === undefined) {
     return undefined;
   }
-  return `Warning: selector cost is ${ratio.toFixed(1)}% of baseline. Use shorter selectors or ... ranges.`;
+  return `Selector cost: ${ratio.toFixed(1)}%`;
 }
 
 function getSelectorCostRatioPercent(efficiency: PatchCharEfficiency): number | undefined {

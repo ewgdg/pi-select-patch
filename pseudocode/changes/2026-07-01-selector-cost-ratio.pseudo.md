@@ -6,11 +6,11 @@ affects:
   - src/tools/patch-render.ts
 ---
 
-# Selector cost warning
+# Selector cost ratio
 
 ## Intent
 
-Warn agents when authored selector rows are too close to the equivalent unified-diff baseline, so future patches use shorter selectors or ranges.
+Report selector authored-character cost as a simple percentage of the equivalent unified-diff baseline, so agents can see selector compactness without warning noise.
 
 ## Behavior
 
@@ -33,7 +33,7 @@ when applying or dry-running a patch succeeds:
 
 when formatting successful model-visible output or rendering successful patch result:
   keep existing receipt/status, matcher, and patch efficiency output
-  if selector baseline chars > 0 and selector patch chars / selector baseline chars > 50%:
-    append warning:
-      Warning: selector cost is <ratio>% of baseline. Use shorter selectors or ... ranges.
+  if selector baseline chars > 0:
+    append muted/plain metric:
+      Selector cost: <ratio>%
 ```

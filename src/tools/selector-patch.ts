@@ -36,7 +36,7 @@ import {
   writeNewTextFileAtomically,
   writeTextFileAtomically,
 } from "../fs-text.js";
-import { formatSelectorCostWarning, type PatchCharEfficiency } from "../selector-efficiency.js";
+import { formatSelectorCost, type PatchCharEfficiency } from "../selector-efficiency.js";
 import {
   countRenderedLines,
   getVisibleOutputOverflow,
@@ -830,8 +830,8 @@ function buildPatchToolResult(
   receipt: PatchReceiptMode,
 ) {
   const selectorEfficiency = getPatchSelectorEfficiency(plannedChanges);
-  const selectorWarning = formatSelectorCostWarning(selectorEfficiency);
-  const status = buildPatchStatusDecision(plannedChanges, dryRun, receipt, selectorWarning);
+  const selectorCost = formatSelectorCost(selectorEfficiency);
+  const status = buildPatchStatusDecision(plannedChanges, dryRun, receipt, selectorCost);
   return {
     content: [{ type: "text" as const, text: status.text }],
     details: {
@@ -994,18 +994,18 @@ function buildPatchStatusDecision(
   plannedChanges: readonly PlannedFileChange[],
   dryRun: boolean,
   receipt: PatchReceiptMode,
-  selectorWarning: string | undefined,
+  selectorCost: string | undefined,
 ): PatchStatusDecision {
   const visibleText = appendOptionalLine(
     receipt === "hash"
       ? renderPatchHashReceiptDiffs(plannedChanges.map(toDiffInput))
       : renderUniversalPatchStatus(plannedChanges, dryRun),
-    selectorWarning,
+    selectorCost,
   );
   const visibleLineCount = countRenderedLines(visibleText);
   const overflow = getVisibleOutputOverflow(visibleText, visibleLineCount);
   if (overflow) {
-    const text = appendOptionalLine(renderUniversalPatchStatus(plannedChanges, dryRun), selectorWarning);
+    const text = appendOptionalLine(renderUniversalPatchStatus(plannedChanges, dryRun), selectorCost);
     return {
       text,
       omitted: true,

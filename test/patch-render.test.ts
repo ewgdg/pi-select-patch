@@ -154,10 +154,10 @@ describe("patch renderer helpers", () => {
     });
 
     expect(rendered).toContain("<muted>Patch efficiency: 5/9 chars vs baseline (55.6%, saved 44.4%)</muted>");
-    expect(rendered).toContain("<warning>Warning: selector cost is 70.0% of baseline. Use shorter selectors or ... ranges.</warning>");
+    expect(rendered).toContain("<muted>Selector cost: 70.0%</muted>");
   });
 
-  it("skips selector cost warning at or below half of baseline", () => {
+  it("renders selector cost metric at or below half of baseline", () => {
     const rendered = buildPatchResultRenderText({
       details: {
         selectorEfficiency: { patchChars: 5, baselineChars: 10 },
@@ -169,7 +169,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).not.toContain("selector cost");
+    expect(rendered).toContain("<muted>Selector cost: 50.0%</muted>");
   });
 
   it("renders collapsed diff with compact limit, color, omission count, and Ctrl+O hint", () => {

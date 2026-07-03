@@ -155,7 +155,7 @@ Update receipts show hunk headers, surviving context line hashes, and inserted-l
 ## `details.diff`
 
 Tool result details include `details.diff`: a human patch transcript for host/UI. Add entries show added input lines, and update entries show resolved hunk transcript lines. This diff is not placed in model-visible output. Pi TUI human rendering reads this field and shows a colorized preview in collapsed mode, with a larger transcript view when expanded.
-Tool result details also include `details.selectorEfficiency`, a selector-only authored-character count versus canonical unified-diff baseline. Insert rows are excluded. When selector cost is above 50% of baseline, successful model-visible output and Pi TUI rendering warn: `Warning: selector cost is <ratio>% of baseline. Use shorter selectors or ... ranges.`
+Tool result details also include `details.selectorEfficiency`, a selector-only authored-character count versus canonical unified-diff baseline. Insert rows are excluded. When selector baseline characters are available, successful model-visible output and Pi TUI rendering show `Selector cost: <ratio>%`.
 When patch execution fails, parser errors include an input line number. Pi TUI rendering shows the first error line plus a bounded preview of the actual agent input (`patch` text, or the `patch_file` path); when a line number is available, the inline `patch` preview is centered around that line. Partial apply failures lift the `Failed:` operation and retry patch path above the input preview so the real cause is visible without expanding the tool result.
 
 ## Collision risk

@@ -173,7 +173,7 @@ describe("patch visible status", () => {
     expect(guideline).toContain("</patch_tool_policy>");
   });
 
-  it("is agent-visible as a hash receipt with selector cost warning", async () => {
+  it("is agent-visible as a hash receipt with selector cost metric", async () => {
     const diff = [
       "@@",
       row(" ", "a"),
@@ -192,7 +192,7 @@ describe("patch visible status", () => {
         hashContext("a"),
         `+${hashLine("new")}`,
         hashContext("z"),
-        "Warning: selector cost is 225.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 225.0%",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain(hashLine("old"));
@@ -225,7 +225,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 100.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
@@ -258,7 +258,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 100.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 100.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(
@@ -358,7 +358,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 77.3% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 77.3%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(
@@ -437,7 +437,7 @@ describe("patch visible status", () => {
         "*** Update File: file.txt",
         "@@ matched line 1 @@",
         `+${hashLine("new")}`,
-        "Warning: selector cost is 125.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 125.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
@@ -1287,7 +1287,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Warning: selector cost is 150.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 150.0%",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain("line-1");
@@ -1303,7 +1303,7 @@ describe("patch visible status", () => {
       [
         "*** Update File: file.txt",
         "@@ matched line 1 @@",
-        "Warning: selector cost is 120.0% of baseline. Use shorter selectors or ... ranges.",
+        "Selector cost: 120.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("");

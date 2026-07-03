@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { formatSelectorCostWarning, type PatchCharEfficiency } from "../selector-efficiency.js";
+import { formatSelectorCost, type PatchCharEfficiency } from "../selector-efficiency.js";
 
 export const COLLAPSED_RESULT_DIFF_MAX_LINES = 16;
 export const EXPANDED_RESULT_DIFF_MAX_LINES = 200;
@@ -246,8 +246,8 @@ export function buildPatchResultRenderText(options: {
   const renderedDiff = formatPatchResultDiff(diff, expanded, theme);
   const matcherStatsFooter = formatPatchMatcherStatsFooter(getPatchMatcherStats(details), theme);
   const charEfficiencyFooter = formatPatchCharEfficiencyFooter(getPatchCharEfficiency(details), theme);
-  const selectorCostWarning = formatPatchSelectorCostWarning(getPatchSelectorEfficiency(details), theme);
-  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, charEfficiencyFooter, selectorCostWarning];
+  const selectorCost = formatPatchSelectorCost(getPatchSelectorEfficiency(details), theme);
+  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, charEfficiencyFooter, selectorCost];
 
   return body.filter((part): part is string => Boolean(part)).join("\n");
 }
@@ -332,12 +332,12 @@ function formatPatchCharEfficiencyFooter(efficiency: PatchCharEfficiency | undef
   return theme.fg("muted", `Patch efficiency: ${patchChars}/${baselineChars} chars vs baseline (${formatPercent(ratio)}, saved ${formatPercent(saved)})`);
 }
 
-function formatPatchSelectorCostWarning(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
+function formatPatchSelectorCost(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
   if (!efficiency) {
     return undefined;
   }
-  const warning = formatSelectorCostWarning(efficiency);
-  return warning ? theme.fg("warning", warning) : undefined;
+  const cost = formatSelectorCost(efficiency);
+  return cost ? theme.fg("muted", cost) : undefined;
 }
 
 function formatPercent(value: number): string {
