@@ -2,11 +2,11 @@
 
 Pi extension for token-efficient file edits using explicit selector patches.
 
-The package registers `patch` for multi-file add/update patch application. Patch input uses file operation sections directly; legacy `*** Begin Patch` / `*** End Patch` boundaries are accepted only as a matching outer pair. Only `profile: "hash"` exposes the hash-line reader as `read`; otherwise `read_hash` stays hidden and built-in `read` stays active.
+The package registers `patch` for multi-file update patch application. Use the built-in `write` tool for new files. Patch input uses file operation sections directly; legacy `*** Begin Patch` / `*** End Patch` boundaries are accepted only as a matching outer pair. Only `profile: "hash"` exposes the hash-line reader as `read`; otherwise `read_hash` stays hidden and built-in `read` stays active.
 
 Core design: keep patches short while staying exact. Use concise selectors and ` ...` / `-...` to skip or replace large unchanged ranges. Ambiguous or stale hunks fail instead of guessing.
 
-On session start, the extension removes the mutable built-in `write` tool, `read_hash`, and stale selector tool names (`selector_read`, `selector_patch`). Built-in `edit` remains active when already enabled. Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
+On session start, the extension keeps the built-in `write` tool active, and removes `read_hash` plus stale selector tool names (`selector_read`, `selector_patch`). Built-in `edit` remains active when already enabled. Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
 
 ## Profiles
 
@@ -43,8 +43,6 @@ PI_SELECT_PATCH_PROFILE=hash pi    # force hash-line read and hash patch default
 Configured `profile` sets patch defaults. Classic profile is markerful: it parses explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled). Smart and hash profiles keep unified-diff operators: context rows start with a space, delete rows start with `-`, and only the selector text after the operator changes meaning. `receipt` overrides the configured profile receipt default for one call.
 
 ```diff
-*** Add File: new.txt
-+literal new file line
 *** Update File: existing.txt
 @@
  :exact context text
@@ -59,8 +57,8 @@ Configured `profile` sets patch defaults. Classic profile is markerful: it parse
 
 ### File operations
 
-- `*** Add File: path` creates a new UTF-8 text file. Body rows must start with `+`; text after `+` is literal file content.
 - `*** Update File: path` applies selector hunks to an existing UTF-8 text file.
+- Use the built-in `write` tool to create new files.
 - `*** Delete File: path` is not supported; use an explicit shell command for whole-file deletion when needed.
 
 Multiple operations may target the same path. File operations run in authored order, so a later `*** Update File` section can match output created by an earlier section.
@@ -109,9 +107,6 @@ Malformed unified-diff rows are tolerated per matcher in classic exact mode. Sel
 With `profile: "hash"` or `receipt: "hash"`, success output is a compact hash-only receipt. Context rows show only hashes, inserted rows show `+HASH`, and deleted rows are omitted:
 
 ```text
-*** Add File: new.txt
-@@ add file @@
-+9Nrk
 *** Update File: existing.txt
 @@ matched line 12 @@
  Abc1

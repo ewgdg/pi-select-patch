@@ -17,7 +17,6 @@ export default function piSelectPatch(pi: ExtensionAPI): void {
     const withoutConflictingTools = activeTools.filter(
       (tool) =>
         tool !== "read_hash" &&
-        tool !== "write" &&
         tool !== "selector_read" &&
         tool !== "selector_patch",
     );

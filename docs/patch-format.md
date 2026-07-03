@@ -16,11 +16,9 @@ Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline
 
 ## Universal patch
 
-Preferred `patch` input carries file paths in file operation sections. The tool accepts either inline `patch` text or `patch_file`; provide exactly one. `patch_file` paths resolve against the tool cwd; file paths inside the patch also resolve against cwd, not the patch file directory. Legacy `*** Begin Patch` / `*** End Patch` outer boundaries are accepted only as a matching outer pair; preferred input omits them.
+Preferred `patch` input carries existing file paths in file operation sections. The tool accepts either inline `patch` text or `patch_file`; provide exactly one. `patch_file` paths resolve against the tool cwd; file paths inside the patch also resolve against cwd, not the patch file directory. Legacy `*** Begin Patch` / `*** End Patch` outer boundaries are accepted only as a matching outer pair; preferred input omits them.
 
 ```diff
-*** Add File: new.txt
-+literal new file line
 *** Update File: existing.txt
 @@
  :exact context text
@@ -38,12 +36,11 @@ Preferred `patch` input carries file paths in file operation sections. The tool 
  :end context text
 ```
 
-Supported section headers:
+Prompted section header:
 
-- `*** Add File: path`
 - `*** Update File: path`
 
-`*** Delete File: path` is rejected. Use an explicit shell command for whole-file deletion when needed.
+Use the built-in `write` tool for new files. `*** Delete File: path` is rejected. Use an explicit shell command for whole-file deletion when needed.
 
 Multiple operations may target the same path. File operations apply sequentially: earlier successful operations stay applied if a later non-dry operation fails, and later operations are skipped. During non-dry apply failures, the tool writes a retry patch by copying the authored failed operation plus skipped later operations, then includes its path in the error message. Parser failures write the raw malformed input as the retry patch so agents can fix it via `patch_file` without re-emitting the full patch. `dry_run: true` validates the full patch without writing.
 
@@ -54,14 +51,6 @@ Patch calls can set `receipt`. `profile` is configuration, not a patch parameter
 - configured `profile: "hash"` — update hunk rows are strict by default: only unified-diff-style hash selectors, ranges, and inserts are accepted; hash receipt.
 
 Classic profile is markerful: it parses explicit selector markers. Smart and hash profiles keep unified-diff operators: context rows start with a space, delete rows start with `-`, and only the selector text after the operator changes meaning. `receipt` can be `status` or `hash` and overrides the configured profile receipt default for one call.
-
-## Add File
-
-- Target must not exist.
-- Each body row starts with `+`; text after `+` is literal file content.
-- Do not include hashes in `+` lines unless those hash characters are intended file content.
-- New file content is written as rows joined with `\n`; no implicit final newline is added.
-- With hash receipt, visible output exposes the Add File header, `@@ add file @@`, and inserted content rows. With status receipt, visible status is the Add File header plus `Applied`.
 
 ## Update File
 
@@ -141,9 +130,6 @@ after
 With `profile: "hash"` or `receipt: "hash"`, `patch` success output is a compact hash-only receipt, not a full patched file:
 
 ```text
-*** Add File: new.txt
-@@ add file @@
-+9Nrk
 *** Update File: existing.txt
 @@ matched line 12 @@
  Abc1
@@ -154,7 +140,7 @@ Update receipts show hunk headers, surviving context line hashes, and inserted-l
 
 ## `details.diff`
 
-Tool result details include `details.diff`: a human patch transcript for host/UI. Add entries show added input lines, and update entries show resolved hunk transcript lines. This diff is not placed in model-visible output. Pi TUI human rendering reads this field and shows a colorized preview in collapsed mode, with a larger transcript view when expanded.
+Tool result details include `details.diff`: a human patch transcript for host/UI. Update entries show resolved hunk transcript lines. This diff is not placed in model-visible output. Pi TUI human rendering reads this field and shows a colorized preview in collapsed mode, with a larger transcript view when expanded.
 Tool result details also include `details.selectorEfficiency`, a selector-only authored-character count versus canonical unified-diff baseline. Insert rows are excluded. When selector baseline characters are available, successful model-visible output and Pi TUI rendering show `Selector cost: <ratio>%`.
 When patch execution fails, parser errors include an input line number. Pi TUI rendering shows the first error line plus a bounded preview of the actual agent input (`patch` text, or the `patch_file` path); when a line number is available, the inline `patch` preview is centered around that line. Partial apply failures lift the `Failed:` operation and retry patch path above the input preview so the real cause is visible without expanding the tool result.
 

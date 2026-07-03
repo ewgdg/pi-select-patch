@@ -66,11 +66,8 @@ function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
     Inline patch text. Mutually exclusive with \`patch_file\`.
     No outer wrapper; start directly with a file section header. File sections have no closing delimiter; the next file section header or end of input ends the current section.
     ## File Sections
-    A patch may contain multiple \`*** Add File\` and \`*** Update File\` sections;
+    A patch may contain multiple \`*** Update File\` sections;
     a file section header includes a file path.
-    e.g. \`*** Add File: path/to/file.txt\`
-    ### Add File
-    \`Add File\` sections contain body rows only: \`+<text>\`. They do not use \`@@\` hunks.
     ## Hunk Sections
     Each \`Update File\` section may contain multiple \`@@\` hunks.
     Within one \`Update File\` section, later hunks may match or span only untouched original target lines; they cannot anchor on or range across lines inserted or already used by earlier hunks. To make an edit depend on prior output, use a later \`*** Update File\` section for the same path.
@@ -84,7 +81,7 @@ ${hunkMatchDescription}
     Patch uses a leading "+" operator to insert lines.
     The "+" char must be first char of the line.
     The syntax is \`+<text>\`, where \`<text>\` is raw line content.
-    Only hunk sections or \`Add File\` sections may insert lines.
+    Only hunk sections may insert lines.
     </description>
 
     <caveats>
@@ -348,7 +345,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
     name: "patch",
     label: "Select Patch",
     description:
-      "Token-efficient tool for editing files with multi-file-capable add/update patches.",
+      "Token-efficient tool for editing files with multi-file-capable update patches.",
     promptSnippet:
       "Use this tool for line-based patching. Use shorter selectors.",
     promptGuidelines: buildPatchPromptGuidelines(profile),

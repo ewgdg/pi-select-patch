@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import piSelectPatch from "../src/index.js";
 
 describe("extension registration", () => {
-  it("uses smart profile by default while hiding read_hash/write", async () => {
+  it("uses smart profile by default while hiding read_hash and keeping write", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
@@ -58,8 +58,9 @@ describe("extension registration", () => {
         "Prefer short selectors plus accurate line anchors",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toContain("Add File");
       expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
-      expect(activeTools).not.toContain("write");
+      expect(activeTools).toContain("write");
       expect(activeTools).toContain("edit");
       expect(activeTools).not.toContain("selector_read");
       expect(activeTools).not.toContain("selector_patch");
