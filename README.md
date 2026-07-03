@@ -6,7 +6,7 @@ The package registers `patch` for multi-file add/update patch application. Patch
 
 Core design: keep patches short while staying exact. Use concise selectors and ` ...` / `-...` to skip or replace large unchanged ranges. Ambiguous or stale hunks fail instead of guessing.
 
-On session start, the extension removes mutable built-in tools (`edit`, `write`), `read_hash`, and stale selector tool names (`selector_read`, `selector_patch`). Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
+On session start, the extension removes the mutable built-in `write` tool, `read_hash`, and stale selector tool names (`selector_read`, `selector_patch`). Built-in `edit` remains active when already enabled. Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
 
 ## Profiles
 
