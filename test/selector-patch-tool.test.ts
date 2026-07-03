@@ -167,7 +167,6 @@ describe("patch visible status", () => {
     const guideline = smartPatchTool.promptGuidelines?.[0] ?? "";
 
     expect(guideline).toContain("<patch_tool_policy>");
-    expect(guideline).toContain("smart profile active");
     expect(guideline).toContain("Token efficiency is the highest priority");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).toContain("</patch_tool_policy>");

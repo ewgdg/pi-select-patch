@@ -55,7 +55,7 @@ describe("extension registration", () => {
       expect(activeTools).toContain("patch");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
-        "smart profile active",
+        "Token efficiency is the highest priority",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
       expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
@@ -107,7 +107,7 @@ describe("extension registration", () => {
       expect(activeTools).toContain("patch");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
-        "smart profile active",
+        "Token efficiency is the highest priority",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
