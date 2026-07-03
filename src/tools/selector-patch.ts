@@ -187,6 +187,20 @@ function buildPatchParameterExamples(profile: SelectorPatchProfile): string {
       Smart context selectors anchor the range. \`-...\` deletes all matched lines between them.
       </explanation>
       </example>
+      <example description="code block handling">
+      <code_block>
+      long_object_name.long_function_call(long_arg_name)
+      </code_block>
+      <patch>
+      *** Update File: path/to/file.txt
+      @@
+      -long_obj.long_call(arg)
+      +another_call(arg)
+      </patch>
+      <explanation>
+      Uses char subsequence to match long code line.
+      </explanation>
+      </example>
     `);
   }
   if (profile === "hash") {
@@ -336,7 +350,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
     description:
       "Token-efficient tool for editing files with multi-file-capable add/update patches.",
     promptSnippet:
-      "Use this tool for patching. Pick the selector costing the least.",
+      "Use this tool for line-based patching. Use shorter selectors.",
     promptGuidelines: buildPatchPromptGuidelines(profile),
     parameters: buildPatchToolParameters(profile),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -469,11 +483,13 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
   return [
     dedentBlock(`
       <patch_tool_policy>
+      Prefer short selectors plus accurate line anchors when available over long exact selectors.
+      Short selectors do not imply high error rate when surrounding context disambiguates the hunk.
+      Long selectors usually cost more than their small error-rate drop is worth.
       ${buildPatchProfilePromptGuideline(profile)}
       ${profile === "classic" ? "Classic profile supports explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
-      <important>Token efficiency is the highest priority.</important>
       ${buildPatchProfilePolicy(profile)}
-      <important>Use range selector whenever possible for hunks > 3 lines.</important>
+      Use range selector whenever possible for spans over 3 lines.
       Use line anchors to disambiguate only if the latest accurate line offset is available or add extra redundancy to the anchors.
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
       </patch_tool_policy>
