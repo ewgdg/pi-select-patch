@@ -446,8 +446,22 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["subsequence"]);
   });
 
-  it("uses strict fuzzy token-subsequence matching as the last smart tier", () => {
+  it("uses strict fuzzy token-subsequence matching before char subsequence", () => {
     const result = applyPatchToText("return profilePolicy;", patch("-~return profilePolciy;"));
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["fuzzy"]);
+  });
+
+  it("uses char subsequence matching as the last smart tier", () => {
+    const result = applyPatchToText("alpha beta gamma", patch("-~al gm"));
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["charSubsequence"]);
+  });
+
+  it("prefers fuzzy over final char subsequence matching", () => {
+    const result = applyPatchToText("return profilePolicy;", patch("-~return profilePolic;"));
 
     expect(result.text).toBe("");
     expect(result.hunkAudits[0].matcherKinds).toEqual(["fuzzy"]);

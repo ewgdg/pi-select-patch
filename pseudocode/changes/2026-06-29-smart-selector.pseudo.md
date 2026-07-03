@@ -31,7 +31,7 @@ For each hunk:
 - If hunk has no smart match ops: run existing match flow unchanged.
 - If hunk has any smart match op:
   - Keep fixed explicit selectors on their normal predicate.
-  - For each candidate hunk span/assignment, each smart row independently resolves against its assigned target line using the first matching line-level kind: exact, prefix/suffix, contains, then token-subsequence.
+  - For each candidate hunk span/assignment, each smart row independently resolves against its assigned target line using the first matching line-level kind: exact, prefix/suffix, contains, token-subsequence, fuzzy token-subsequence, then character subsequence.
   - Prefix/suffix have the same rank for dominance; record the actual resolved `prefix` or `suffix` kind for audit.
   - Collect whole-hunk candidates using same contiguous/sparse, anchor, range, and touched-line behavior as existing apply. Do not stop at the first weaker candidate.
   - Score each candidate by smart op indexes in hunk order. Candidate A dominates B when A is no worse on every smart row rank and better on at least one row. Equal score vectors do not dominate.
@@ -45,14 +45,16 @@ For each hunk:
 - exact: target line equals query exactly; no broad guard beyond non-empty parser requirement.
 - prefix/suffix: query is useful broad text, then target starts with query or ends with query.
 - contains: query is useful broad text, then target includes query.
-- token-subsequence: query is useful broad text and has at least two whitespace tokens, then those tokens appear in that target line's whitespace tokens in order with gaps allowed.
+- token-subsequence: query tokens appear in that target line's whitespace tokens in order with gaps allowed.
+- fuzzy token-subsequence: bounded typo-tolerant token-subsequence matches when token length and total edit limits allow it.
+- character subsequence: as final tier, query is long enough to be useful and every query character appears in target line in order with gaps allowed.
 - Useful broad text guard is deterministic: trimmed query is nonblank, has a minimum useful length, and contains at least one alphanumeric character.
-- Tokenization is whitespace only. No character subsequence matching.
+- Tokenization is whitespace only for token tiers. Character subsequence runs after token/fuzzy tiers.
 
 ## Audit/render/serialization/docs
 
 - Match pattern can keep `~query` so authors see smart selectors round-trip.
-- Matcher kinds expose each smart row's resolved kind: `exact`, `prefix`, `suffix`, `contains`, or `subsequence`.
+- Matcher kinds expose each smart row's resolved kind: `exact`, `prefix`, `suffix`, `contains`, `subsequence`, `fuzzy`, or `charSubsequence`.
 - Universal serialization writes smart match ops back as ` ~query` or `-~query`.
 - Renderer stats count `subsequence` from matcher kinds.
 - Docs describe `~` as opt-in smart selector and list independent per-row resolution, dominance, ambiguity, and stale rules.

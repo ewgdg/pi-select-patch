@@ -25,6 +25,7 @@ export interface PatchMatcherStats {
   suffix: number;
   subsequence: number;
   fuzzy: number;
+  charSubsequence: number;
   hash: number;
   combined: number;
   range: number;
@@ -253,7 +254,7 @@ export function buildPatchResultRenderText(options: {
 }
 
 function createEmptyPatchMatcherStats(): PatchMatcherStats {
-  return { exact: 0, prefix: 0, contains: 0, suffix: 0, subsequence: 0, fuzzy: 0, hash: 0, combined: 0, range: 0, unifiedDiff: 0, total: 0 };
+  return { exact: 0, prefix: 0, contains: 0, suffix: 0, subsequence: 0, fuzzy: 0, charSubsequence: 0, hash: 0, combined: 0, range: 0, unifiedDiff: 0, total: 0 };
 }
 
 function incrementPatchMatcherKind(stats: PatchMatcherStats, matcherKind: string): void {
@@ -263,6 +264,7 @@ function incrementPatchMatcherKind(stats: PatchMatcherStats, matcherKind: string
   else if (matcherKind === "suffix") stats.suffix += 1;
   else if (matcherKind === "subsequence") stats.subsequence += 1;
   else if (matcherKind === "fuzzy") stats.fuzzy += 1;
+  else if (matcherKind === "charSubsequence") stats.charSubsequence += 1;
   else if (matcherKind === "hash") stats.hash += 1;
   else if (matcherKind === "combined") stats.combined += 1;
   else if (matcherKind === "range") stats.range += 1;
@@ -307,6 +309,7 @@ function formatPatchMatcherStatsFooter(stats: PatchMatcherStats, theme: PatchRen
     ["suffix", stats.suffix],
     ["subsequence", stats.subsequence],
     ["fuzzy", stats.fuzzy],
+    ["char-subsequence", stats.charSubsequence],
     ["hash", stats.hash],
     ["combined", stats.combined],
     ["range", stats.range],

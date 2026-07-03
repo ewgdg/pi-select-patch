@@ -112,7 +112,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
       Every hunk body row must start with an operator: literal space for context, \`-\` for delete, or \`+\` for insert.
       Use \` <selector>\` rows for context and \`-<selector>\` rows for deletes. A bare selector line like \`selector text\` is invalid because it is missing the leading space operator.
       Use a blank hunk row or single-space row for blank context; use \`-\` to delete a blank line.
-      Smart selectors resolve independently through resolver tiers: exact, prefix/suffix, contains, whitespace token-subsequence, then bounded fuzzy token-subsequence; The whole hunk applies only with one dominance winner.
+      Smart selectors resolve independently through resolver tiers: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence; The whole hunk applies only with one dominance winner.
       Range rows are \` ...\` for preserved/skipped context and \`-...\` for deleted ranges.
     `);
   }

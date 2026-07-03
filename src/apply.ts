@@ -33,7 +33,7 @@ export interface PatchHunkTranscript {
   lines: PatchTranscriptLine[];
 }
 
-export type PatchMatcherKind = "exact" | "prefix" | "contains" | "suffix" | "subsequence" | "fuzzy" | "hash" | "combined" | "range" | "unifiedDiff";
+export type PatchMatcherKind = "exact" | "prefix" | "contains" | "suffix" | "subsequence" | "fuzzy" | "charSubsequence" | "hash" | "combined" | "range" | "unifiedDiff";
 
 export interface PatchHunkAudit {
   hunkIndex: number;
@@ -67,7 +67,7 @@ interface AppliedHunk {
   audit: PatchHunkAudit;
 }
 
-type SmartMatcherKind = Extract<PatchMatcherKind, "exact" | "prefix" | "suffix" | "contains" | "subsequence" | "fuzzy">;
+type SmartMatcherKind = Extract<PatchMatcherKind, "exact" | "prefix" | "suffix" | "contains" | "subsequence" | "fuzzy" | "charSubsequence">;
 
 const SMART_MATCH_RANKS: Record<SmartMatcherKind, number> = {
   exact: 0,
@@ -75,13 +75,15 @@ const SMART_MATCH_RANKS: Record<SmartMatcherKind, number> = {
   suffix: 1,
   contains: 2,
   subsequence: 3,
-  fuzzy: 4
+  fuzzy: 4,
+  charSubsequence: 5
 };
 const SMART_MATCH_CANDIDATE_LIMIT = 1000;
 const SMART_FUZZY_MIN_TOKEN_LENGTH = 6;
 const SMART_FUZZY_TWO_EDIT_TOKEN_LENGTH = 16;
 const SMART_FUZZY_SINGLE_TOKEN_MIN_LENGTH = 8;
 const SMART_FUZZY_TOTAL_EDIT_LIMIT = 2;
+const SMART_CHAR_SUBSEQUENCE_MIN_NON_WHITESPACE = 4;
 
 interface ResolvedHunkMatch {
   match: SparseMatch;
@@ -354,7 +356,21 @@ function bestSmartMatcherResult(query: string, targetLine: string): SmartMatcher
   if (smartTokenSubsequenceMatches(targetLine, query)) return { kind: "subsequence", editCost: 0 };
   const fuzzyEditCost = fuzzyTokenSubsequenceEditCost(targetLine, query);
   if (fuzzyEditCost !== undefined) return { kind: "fuzzy", editCost: fuzzyEditCost };
+  if (smartCharSubsequenceMatches(targetLine, query)) return { kind: "charSubsequence", editCost: 0 };
   return undefined;
+}
+
+function smartCharSubsequenceMatches(content: string, query: string): boolean {
+  const usefulQueryCharCount = Array.from(query).filter((char) => !/\s/.test(char)).length;
+  if (usefulQueryCharCount < SMART_CHAR_SUBSEQUENCE_MIN_NON_WHITESPACE) return false;
+
+  let targetIndex = 0;
+  for (const queryChar of query) {
+    targetIndex = content.indexOf(queryChar, targetIndex);
+    if (targetIndex === -1) return false;
+    targetIndex += queryChar.length;
+  }
+  return true;
 }
 
 function smartTokenSubsequenceMatches(content: string, query: string): boolean {
@@ -796,7 +812,7 @@ function smartCandidateDominates(left: SmartHunkCandidate, right: SmartHunkCandi
 }
 
 function smartMatcherRank(kind: PatchMatcherKind | undefined): number {
-  if (kind === "exact" || kind === "prefix" || kind === "suffix" || kind === "contains" || kind === "subsequence" || kind === "fuzzy") {
+  if (kind === "exact" || kind === "prefix" || kind === "suffix" || kind === "contains" || kind === "subsequence" || kind === "fuzzy" || kind === "charSubsequence") {
     return SMART_MATCH_RANKS[kind];
   }
   throw new Error("Internal patch error: missing smart matcher kind.");
