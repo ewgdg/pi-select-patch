@@ -168,6 +168,7 @@ describe("patch visible status", () => {
 
     expect(guideline).toContain("<patch_tool_policy>");
     expect(guideline).toContain("Prefer short selectors plus accurate line anchors");
+    expect(guideline).toContain("Use `edit` for small, unique intra-line replacements where line-based patching would be noisier");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
     expect(guideline).toContain("</patch_tool_policy>");

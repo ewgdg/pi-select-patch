@@ -481,6 +481,7 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
     dedentBlock(`
       <patch_tool_policy>
       Prefer short selectors plus accurate line anchors when available over long exact selectors.
+      Prefer \`patch\` over \`edit\` when surrounding context is needed to anchor the change. Use \`edit\` for small, unique intra-line replacements where line-based patching would be noisier.
       Short selectors do not imply high error rate when surrounding context disambiguates the hunk.
       Long selectors usually cost more than their small error-rate drop is worth.
       ${buildPatchProfilePromptGuideline(profile)}
