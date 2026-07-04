@@ -58,6 +58,21 @@ describe("patch parser", () => {
     if (op.kind === "insert") expect(op.content).toBe("a│b");
   });
 
+  it("parses literal replace rows from two JSON strings", () => {
+    const parsed = parsePatch(["@@", " target line", 'r"old" "new"'].join("\n"), undefined, 0, { profile: "smart" });
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "target line" },
+      { kind: "replace", oldText: "old", newText: "new" },
+    ]);
+  });
+
+  it("rejects malformed literal replace rows", () => {
+    for (const row of ["r", 'r"" "new"', 'r"old"', 'r"old" "new" extra', 'r"a\\n" "b"']) {
+      expect(() => parsePatch(["@@", " target line", row].join("\n"), undefined, 0, { profile: "smart" })).toThrow("[E_INVALID_PATCH]");
+    }
+  });
+
   it("parses text context/delete selectors literally", () => {
     const parsed = parsePatch(["@@", " :ctx text", "-:delete text", " :│starts", "-:│delete pipe", " :  indented"].join("\n"));
 
@@ -268,12 +283,13 @@ describe("patch parser", () => {
     expect(() => parsePatch("@@\nnot-a-hash", undefined, 0, { profile: "hash" })).toThrow("Malformed patch operation");
   });
 
-  it("allows only hash, range, and insert rows in strict hash mode", () => {
+  it("allows only hash, range, insert, and replace rows in strict hash mode", () => {
     const hash = hashLine("old").slice(0, 3);
-    const parsed = parsePatch(`@@\n ${hash}\n-${hash}\n ...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
+    const parsed = parsePatch(`@@\n ${hash}\nr"old" "new"\n-${hash}\n ...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", hash },
+      { kind: "replace", oldText: "old", newText: "new" },
       { kind: "delete", hash },
       { kind: "range", rangeKind: "context" },
       { kind: "range", rangeKind: "delete" },

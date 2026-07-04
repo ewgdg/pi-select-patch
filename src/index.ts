@@ -16,6 +16,7 @@ export default function piSelectPatch(pi: ExtensionAPI): void {
       profile === "hash" ? [hashProfileReadTool.name, patchTool.name] : [patchTool.name];
     const withoutConflictingTools = activeTools.filter(
       (tool) =>
+        tool !== "edit" &&
         tool !== "read_hash" &&
         tool !== "selector_read" &&
         tool !== "selector_patch",

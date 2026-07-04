@@ -169,7 +169,6 @@ describe("patch visible status", () => {
 
     expect(guideline).toContain("<patch_tool_policy>");
     expect(guideline).toContain("Prefer short selectors plus accurate line anchors");
-    expect(guideline).toContain("Use `edit` for small, unique intra-line replacements where line-based patching would be noisier");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
     expect(guideline).toContain("</patch_tool_policy>");
@@ -229,6 +228,38 @@ describe("patch visible status", () => {
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("new");
+  });
+
+  it("supports literal replace rows in patch tool updates", async () => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "const timeoutMs = 5000;\n");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: file.txt",
+      "@@",
+      " timeoutMs",
+      'r"5000" "3000"',
+      "*** End Patch",
+    ].join("\n");
+
+    const result = await smartPatchTool.execute(
+      "tool-call",
+      { patch },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toBe(
+      [
+        "*** Update File: file.txt",
+        "Applied",
+      ].join("\n"),
+    );
+    expect(detailsDiff(result)).toContain("-const timeoutMs = 5000;");
+    expect(detailsDiff(result)).toContain("+const timeoutMs = 3000;");
+    await expect(readFile(file, "utf8")).resolves.toBe("const timeoutMs = 3000;\n");
   });
 
   it("treats hash-prefixed update rows as smart text by default", async () => {

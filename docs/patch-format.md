@@ -48,7 +48,7 @@ Patch calls can set `receipt`. `profile` is configuration, not a patch parameter
 
 - configured `profile: "classic"` — context/delete rows use classic selector markers or exact unified-diff fallback; status receipt.
 - configured `profile: "smart"` — unified-diff-style context/delete rows use smart selectors; status receipt.
-- configured `profile: "hash"` — update hunk rows are strict by default: only unified-diff-style hash selectors, ranges, and inserts are accepted; hash receipt.
+- configured `profile: "hash"` — update hunk rows are strict by default: only unified-diff-style hash selectors, ranges, inserts, and replace rows are accepted; hash receipt.
 
 Classic profile is markerful: it parses explicit selector markers. Smart and hash profiles keep unified-diff operators: context rows start with a space, delete rows start with `-`, and only the selector text after the operator changes meaning. `receipt` can be `status` or `hash` and overrides the configured profile receipt default for one call.
 
@@ -79,8 +79,8 @@ Rules:
 
 - Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
-- In classic profile, context/delete rows use `<operator><selector>` syntax. The operator is the leading row action: space or omitted for context, `-` for delete, and `+` for literal insert content. The selector is the match payload after the context/delete operator: `:<text>`, `^<prefix>`, `*<needle>`, `?{...}`, `$<suffix>`, `~<text>`, hash-enabled `#<hash>`, or `...` range. A matcher / match row is operator plus selector. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` ~<text>` / `-~<text>` = opt-in smart context/delete text, hash-enabled ` #<hash>` / `-#<hash>` = hash context/delete (1 to 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector; `+~literal` inserts `~literal`.
-  In configured `profile: "hash"`, allowed update hunk rows are only hash context/delete selectors (` a`, `-b3`), ranges (` ...`, `-...`), and literal inserts (`+literal`). `#` hash markers and text selectors are rejected.
+- In classic profile, context/delete rows use `<operator><selector>` syntax. The operator is the leading row action: space or omitted for context, `-` for delete, `+` for literal insert content, and `r` for replacement inside the previous context-selected line. The selector is the match payload after the context/delete operator: `:<text>`, `^<prefix>`, `*<needle>`, `?{...}`, `$<suffix>`, `~<text>`, hash-enabled `#<hash>`, or `...` range. A matcher / match row is operator plus selector. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` ~<text>` / `-~<text>` = opt-in smart context/delete text, hash-enabled ` #<hash>` / `-#<hash>` = hash context/delete (1 to 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector; `+~literal` inserts `~literal`. Replace rows use `r"old" "new"` with JSON strings and do not consume a target line.
+  In configured `profile: "hash"`, allowed update hunk rows are only hash context/delete selectors (` a`, `-b3`), ranges (` ...`, `-...`), literal inserts (`+literal`), and replace rows (`r"old" "new"`) after context rows. `#` hash markers and text selectors are rejected.
   In classic profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines and literal leading `#` text. Smart profile treats context rows as smart text after the leading space operator and delete rows as smart text after `-`; marker-looking selector text is literal. A blank hunk row always means an empty context line.
 - Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
 - Smart selectors in classic profile (` ~<text>` / `-~<text>`, omitted-space context `~<text>`) and smart profile selector rows resolve independently to their strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Fixed explicit selectors in the same hunk keep their normal predicate. Prefix/suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is the weakest tier and only runs for useful non-whitespace query length.
@@ -123,6 +123,16 @@ before
 
 after
 
+```
+
+## Intra-line replacement rows
+
+Use `r"old" "new"` immediately after a context selector to literally replace text inside that selected line. The two arguments are JSON strings. `old` must be non-empty and must appear exactly once in the current selected line; `new` may be empty. Replace rows do not consume target lines and do not use regex.
+
+```patch
+@@
+ timeoutMs
+r"5000" "3000"
 ```
 
 ## Success receipt

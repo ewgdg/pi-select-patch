@@ -287,7 +287,7 @@ describe("patch renderer helpers", () => {
     ].join("\n");
 
     const rendered = buildPatchResultRenderText({
-      resultText: "[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or selector row.",
+      resultText: "[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, replace, or selector row.",
       details: undefined,
       expanded: false,
       isPartial: false,
@@ -296,7 +296,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, or selector row.</error>");
+    expect(rendered).toContain("<error>[E_INVALID_PATCH] Line 18: Malformed patch operation. Use context, delete, insert, replace, or selector row.</error>");
     expect(rendered).toContain("Agent input around line 18 (patch, lines 14-20 of 20):");
     expect(rendered).toContain("... 13 earlier input lines omitted");
     expect(rendered).toContain("<error>18 │ </error><toolDiffContext>old raw context</toolDiffContext>");

@@ -54,6 +54,39 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchPattern).toEqual([" ^function parsePatchOp", "-^  return old", " :}"]);
   });
 
+  it("applies literal replace rows to the previous context selector", () => {
+    const result = applyPatchToText(
+      "const timeoutMs = 5000;\nconst enabled = true;\n",
+      patch("~timeoutMs", 'r"5000" "3000"')
+    );
+
+    expect(result.text).toBe("const timeoutMs = 3000;\nconst enabled = true;\n");
+    expect(result.hunkTranscripts[0].lines).toEqual([
+      { kind: "delete", content: "const timeoutMs = 5000;" },
+      { kind: "insert", content: "const timeoutMs = 3000;" },
+    ]);
+    expect(result.renderedReceipt).toBe(["@@ result", `+${hashLine("const timeoutMs = 3000;")}`].join("\n"));
+    expect(result.hunkAudits[0].matchPattern).toEqual([" ~timeoutMs"]);
+    expect(result.hunkAudits[0].selectorPatchCharCount).toBe(" timeoutMs".length);
+  });
+
+  it("chains literal replace rows on the same selected line", () => {
+    const result = applyPatchToText(
+      "const url = \"/api/v1/users\";\n",
+      patch("~url =", 'r"/api/v1" "/api/v2"', 'r"users" "accounts"')
+    );
+
+    expect(result.text).toBe("const url = \"/api/v2/accounts\";\n");
+  });
+
+  it("rejects stale, ambiguous, and unbound literal replace rows", () => {
+    expect(() => applyPatchToText("const timeoutMs = 5000;", patch("~timeoutMs", 'r"6000" "3000"'))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("repeat repeat", patch("~repeat", 'r"repeat" "once"'))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("const value = aaa;", patch("~value", 'r"aa" "b"'))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("old", patch('r"old" "new"'))).toThrow(UnsupportedHunkError);
+    expect(() => applyPatchToText("old", patch("-old", 'r"old" "new"'))).toThrow(UnsupportedHunkError);
+  });
+
   it("matches omitted-space context selector rows without unified-diff matching", () => {
     const result = applyPatchToText(
       "function parsePatchOp(line: string): PatchOp {\n  return oldValue;\n}",

@@ -6,7 +6,7 @@ The package registers `patch` for multi-file update patch application. Use the b
 
 Core design: keep patches short while staying exact. Use concise selectors and ` ...` / `-...` to skip or replace large unchanged ranges. Ambiguous or stale hunks fail instead of guessing.
 
-On session start, the extension keeps the built-in `write` tool active, and removes `read_hash` plus stale selector tool names (`selector_read`, `selector_patch`). Built-in `edit` remains active when already enabled. Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
+On session start, the extension keeps the built-in `write` tool active, hides the built-in `edit` tool, and removes `read_hash` plus stale selector tool names (`selector_read`, `selector_patch`). Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
 
 ## Profiles
 
@@ -76,10 +76,11 @@ Rows inside update hunks:
 - ` <selector>` — context line; used only for matching/anchoring.
 - `-<selector>` — delete matched line.
 - `+<content>` — insert literal line content.
+- `r"old" "new"` — replace literal text inside the previous context-selected line; arguments are JSON strings.
 
 Vocabulary:
 
-- **operator** — leading row syntax: space/omitted for context, `-` for delete, `+` for insert.
+- **operator** — leading row syntax: space/omitted for context, `-` for delete, `+` for insert, `r` for intra-line replacement.
 - **selector** — match payload after the context/delete operator, such as `:exact`, `^prefix`, `*contains`, `$suffix`, `?{...}`, `~smart`, hash, or `...` range.
 - **matcher / match row** — operator plus selector, e.g. ` ^prefix` or `-:old text`.
 
@@ -97,6 +98,8 @@ Selectors:
 
 In classic profile, hash prefix selector `#<hash>` is enabled by `receipt: "hash"`. Configured `profile: "hash"` uses bare hash selectors after unified-diff operators instead: ` <hash>` for context and `-<hash>` for delete. Hashes are 1 to 4 base64url characters, with visible width chosen from line entropy. In default smart/status mode, `#` is literal smart selector text. Use text selectors when content predicates are clearer.
 In classic profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
+
+Replace rows operate on the immediately previous context selector row. `old` must be non-empty and appear exactly once in the selected line; `new` may be empty. Replacement is literal, not regex.
 
 Classic profile explicit smart selectors use ` ~target text` or `~target text` for context, `-~old text` for delete. Configured `profile: "smart"` makes unified-diff context/delete selector text smart; marker-looking text like ` ~target` is literal smart context selector text. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is last and only runs for useful non-whitespace query length.
 

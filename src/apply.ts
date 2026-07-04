@@ -1,6 +1,6 @@
 import { AmbiguousHunkError, InvalidPatchError, StaleHunkError, UnsupportedHunkError } from "./errors.js";
 import { type HashFunction, hashLine } from "./hash.js";
-import { normalizeCombinedTextSelector, parsePatch, type Hunk, type MatchPatchOp, type Patch } from "./patch-format.js";
+import { normalizeCombinedTextSelector, parsePatch, type Hunk, type MatchPatchOp, type Patch, type ReplacePatchOp } from "./patch-format.js";
 import { renderHashLines, toHashLines, type HashLineEntry } from "./read-format.js";
 import { parseText, serializeText } from "./text-lines.js";
 
@@ -161,6 +161,7 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
 function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
   validateNoConflictingSelectors(hunk, hunkIndex);
+  validateReplaceRows(hunk, hunkIndex);
   const matchPattern = buildMatchPattern(hunk);
 
   if (matchPattern.length === 0) {
@@ -263,6 +264,10 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       continue;
     }
 
+    if (op.kind === "replace") {
+      continue;
+    }
+
     const targetIndex = match.lineIndexes.get(opIndex);
     if (targetIndex === undefined) {
       throw new Error("Internal patch error: missing hash operation match.");
@@ -276,6 +281,21 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
     selectorBaselineCharCount += baselineSelectorCharCount;
     const targetHash = hashFn(targetContent);
     if (op.kind === "context") {
+      const replaceOps = followingReplaceOps(hunk.ops, opIndex);
+      if (replaceOps.length > 0) {
+        const replacedContent = applyLineReplaceOps(targetContent, replaceOps, hunkIndex, hunk);
+        const replacementPatchCharCount = replaceOps.reduce((total, replaceOp) => total + authoredCharCount(replaceOp, renderReplaceOp(replaceOp).length), 0);
+        patchCharCount += replacementPatchCharCount;
+        baselineCharCount += prefixedLineCharCount(replacedContent);
+        replacement.push({ content: replacedContent, availableForHunkMatch: false });
+        transcriptLines.push({ kind: "delete", content: targetContent });
+        transcriptLines.push({ kind: "insert", content: replacedContent });
+        deletedHashes.push(targetHash);
+        const insertedHash = hashFn(replacedContent);
+        insertedHashes.push(insertedHash);
+        receiptLines.push({ kind: "insert", hash: insertedHash });
+        continue;
+      }
       replacement.push(markLineTouched(lines[targetIndex]));
       transcriptLines.push({ kind: "context", content: targetContent });
       survivingContextHashes.push(targetHash);
@@ -546,7 +566,7 @@ function renderAnchorSearchScope(hunk: Hunk): string {
 
 function buildMatchPattern(hunk: Hunk): string[] {
   return hunk.ops.flatMap((op) => {
-    if (op.kind === "insert") return [];
+    if (op.kind === "insert" || op.kind === "replace") return [];
     if (op.kind === "range") return [renderRangeSelector(op.rangeKind)];
     return [renderMatchSelector(op)];
   });
@@ -562,7 +582,7 @@ function patchErrorLocation(source: Hunk | Hunk["ops"][number], fallback?: Hunk)
 
 function buildMatcherKinds(entries: readonly CurrentLineEntry[], hunk: Hunk, match?: SparseMatch, smartMatcherKinds?: ReadonlyMap<number, PatchMatcherKind>): PatchMatcherKind[] {
   return hunk.ops.flatMap((op, opIndex) => {
-    if (op.kind === "insert") return [];
+    if (op.kind === "insert" || op.kind === "replace") return [];
     if (op.kind === "range") return ["range"];
     if (op.unifiedDiff === true) return ["unifiedDiff"];
     if (op.smart === true) return [smartMatcherKinds?.get(opIndex) ?? resolvedSmartMatcherKind(entries, opIndex, op, match)];
@@ -587,6 +607,46 @@ function resolvedSmartMatcherKind(entries: readonly CurrentLineEntry[], opIndex:
 
 function renderRangeSelector(rangeKind: "context" | "delete"): string {
   return `${rangeKind === "context" ? " " : "-"}...`;
+}
+
+function followingReplaceOps(ops: readonly Hunk["ops"][number][], contextOpIndex: number): ReplacePatchOp[] {
+  const replaceOps: ReplacePatchOp[] = [];
+  for (let index = contextOpIndex + 1; index < ops.length; index += 1) {
+    const op = ops[index];
+    if (op.kind !== "replace") break;
+    replaceOps.push(op);
+  }
+  return replaceOps;
+}
+
+function applyLineReplaceOps(content: string, replaceOps: readonly ReplacePatchOp[], hunkIndex: number, hunk: Hunk): string {
+  let current = content;
+  for (const replaceOp of replaceOps) {
+    const occurrenceCount = countOccurrences(current, replaceOp.oldText);
+    if (occurrenceCount === 0) {
+      throw new StaleHunkError(`Hunk ${hunkIndex} replace text not found in selected line.`, patchErrorLocation(replaceOp, hunk));
+    }
+    if (occurrenceCount > 1) {
+      throw new AmbiguousHunkError(`Hunk ${hunkIndex} replace text matched ${occurrenceCount} occurrences in selected line.`, patchErrorLocation(replaceOp, hunk));
+    }
+    current = current.replace(replaceOp.oldText, replaceOp.newText);
+  }
+  return current;
+}
+
+function countOccurrences(content: string, needle: string): number {
+  let count = 0;
+  let index = 0;
+  while (true) {
+    index = content.indexOf(needle, index);
+    if (index === -1) return count;
+    count += 1;
+    index += 1;
+  }
+}
+
+function renderReplaceOp(op: ReplacePatchOp): string {
+  return `r${JSON.stringify(op.oldText)} ${JSON.stringify(op.newText)}`;
 }
 
 function renderMatchSelector(op: MatchPatchOp): string {
@@ -627,6 +687,23 @@ function validateSparseRanges(hunk: Hunk, hunkIndex: number): void {
     if (!previousAnchorOp || !nextAnchorOp) {
       throw new UnsupportedHunkError(`Hunk ${hunkIndex} range must be between context/deletion operations.`, patchErrorLocation(op, hunk));
     }
+  }
+}
+
+function validateReplaceRows(hunk: Hunk, hunkIndex: number): void {
+  let hasReplaceTarget = false;
+  for (const op of hunk.ops) {
+    if (op.kind === "context") {
+      hasReplaceTarget = true;
+      continue;
+    }
+    if (op.kind === "replace") {
+      if (!hasReplaceTarget) {
+        throw new UnsupportedHunkError(`Hunk ${hunkIndex} replace row must follow a context selector.`, patchErrorLocation(op, hunk));
+      }
+      continue;
+    }
+    hasReplaceTarget = false;
   }
 }
 
@@ -873,7 +950,7 @@ function rangeIsAvailableForHunkMatch(entries: readonly CurrentLineEntry[], star
 
 function nextMatchOpIndex(ops: readonly Hunk["ops"][number][], start: number): number | undefined {
   for (let index = start; index < ops.length; index += 1) {
-    if (ops[index].kind !== "insert") return index;
+    if (ops[index].kind !== "insert" && ops[index].kind !== "replace") return index;
   }
   return undefined;
 }

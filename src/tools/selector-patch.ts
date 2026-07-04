@@ -82,6 +82,10 @@ ${hunkMatchDescription}
     The "+" char must be first char of the line.
     The syntax is \`+<text>\`, where \`<text>\` is raw line content.
     Only hunk sections may insert lines.
+
+    ### Intra-line replacement
+    Use \`r\"old\" \"new\"\` after a context selector to literally replace text inside the previously selected line.
+    Both arguments are JSON strings. \`old\` must be non-empty and appear exactly once in the selected line. \`new\` may be empty. Replacement rows do not use regex.
     </description>
 
     <caveats>
@@ -106,7 +110,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     return dedentBlock(`
       ### Hunk Match: Smart Profile
       Context/delete rows use smart selectors after a required unified-diff operator.
-      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, or \`+\` for insert.
+      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or \`r\` for intra-line replacement on the previous context row.
       Use \` <selector>\` rows for context and \`-<selector>\` rows for deletes. A bare selector line like \`selector text\` is invalid because it is missing the leading space operator.
       Use a blank hunk row or single-space row for blank context; use \`-\` to delete a blank line.
       Smart selectors resolve independently through resolver tiers: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence; The whole hunk applies only with one dominance winner.
@@ -117,7 +121,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     return dedentBlock(`
       ### Hunk Match: Hash Profile
       Context/delete rows identify lines by hash after a required unified-diff operator.
-      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, or \`+\` for insert.
+      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or \`r\` for intra-line replacement on the previous context row.
       Copy only the 1- to 4-character hash from \`HASH│content\` read output, not the separator or content.
       Use \` <hash>\` for context and \`-<hash>\` for deletes. A bare hash line like \`abc\` is invalid because it is missing the leading space operator.
       Use only the hash characters from read output; omit \`#\`.
@@ -127,7 +131,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
   return dedentBlock(`
     ### Hunk Match: Classic Profile
     A hunk contains line matchers. A matcher / match row is operator plus selector.
-    Every hunk body row must start with an operator: literal space for context, "-" for delete, or "+" for insert.
+    Every hunk body row must start with an operator: literal space for context, "-" for delete, "+" for insert, or "r" for intra-line replacement on the previous context row.
     Match operators are "-" for delete and literal space " " for context. Insert rows use "+" plus literal content and have no selector.
     Context selector rows may omit the leading space when the row starts with a selector marker.
     Selector markers:
@@ -481,7 +485,6 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
     dedentBlock(`
       <patch_tool_policy>
       Prefer short selectors plus accurate line anchors when available over long exact selectors.
-      Prefer \`patch\` over \`edit\` when surrounding context is needed to anchor the change. Use \`edit\` for small, unique intra-line replacements where line-based patching would be noisier.
       Short selectors do not imply high error rate when surrounding context disambiguates the hunk.
       Long selectors usually cost more than their small error-rate drop is worth.
       ${buildPatchProfilePromptGuideline(profile)}
@@ -497,7 +500,7 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
 
 function buildPatchProfilePromptGuideline(profile: SelectorPatchProfile): string {
   if (profile === "hash") {
-    return "Hash profile active: update hunk rows use hashes after unified-diff operators: use ` a`, `-b3`, ranges (` ...`, `-...`), and inserts (`+literal`). `patch` success returns a compact hash-only receipt with context hashes and inserted-line hashes. Treat patch receipt as current state for touched hunks.";
+    return "Hash profile active: hunk context rows use hashes after operators. `patch` success returns a compact hash-only receipt with context hashes and inserted-line hashes. Treat patch receipt as current state for touched hunks.";
   }
   if (profile === "smart") {
     return "";

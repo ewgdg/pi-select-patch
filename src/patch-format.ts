@@ -3,9 +3,9 @@ import { isHash, type HashFunction, hashLine } from "./hash.js";
 
 export type MatchPatchOpKind = "context" | "delete";
 export type RangePatchOpKind = "context" | "delete";
-export type PatchOpKind = MatchPatchOpKind | "insert" | "range";
+export type PatchOpKind = MatchPatchOpKind | "insert" | "range" | "replace";
 
-export type PatchOp = MatchPatchOp | InsertPatchOp | RangePatchOp;
+export type PatchOp = MatchPatchOp | InsertPatchOp | RangePatchOp | ReplacePatchOp;
 
 export type TextSelectorKind = "exact" | "prefix" | "suffix" | "contains";
 
@@ -38,6 +38,14 @@ export interface InsertPatchOp {
 export interface RangePatchOp {
   kind: "range";
   rangeKind: RangePatchOpKind;
+  inputLine?: number;
+  authoredCharCount?: number;
+}
+
+export interface ReplacePatchOp {
+  kind: "replace";
+  oldText: string;
+  newText: string;
   inputLine?: number;
   authoredCharCount?: number;
 }
@@ -148,6 +156,9 @@ function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: n
   if (line.startsWith("+")) {
     return parsePatchOp(line, hashFn, inputLine);
   }
+  if (line.startsWith("r")) {
+    return parseReplacePatchOp(line, inputLine);
+  }
   if (options.strictHashRows) {
     return parseHashProfileRow(line, inputLine);
   }
@@ -185,7 +196,7 @@ function parseSmartProfileRow(line: string, inputLine: number): PatchOp {
     }
     return parseSmartPatchOp("delete", selector, line, inputLine);
   }
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or range row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, replace, or range row.", { inputLine });
 }
 
 function parseSmartContextRow(selector: string, line: string, inputLine: number): PatchOp {
@@ -203,7 +214,7 @@ function parseHashProfileRow(line: string, inputLine: number): PatchOp {
   if (line.startsWith("-")) {
     return parseHashProfileMatchOrRange("delete", line.slice(1), line, inputLine);
   }
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or range row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, replace, or range row.", { inputLine });
 }
 
 function parseHashProfileMatchOrRange(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {
@@ -262,7 +273,7 @@ function parseUnifiedDiffOp(line: string, hashFn: HashFunction, inputLine: numbe
     return { kind: "delete", content: line.slice(1), textSelector: "exact", unifiedDiff: true, inputLine, authoredCharCount: line.length };
   }
 
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or selector row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, replace, or selector row.", { inputLine });
 }
 
 function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): PatchOp {
@@ -277,7 +288,65 @@ function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): Pa
     return parseSelectorPatchOp("delete", line.slice(1), line, inputLine);
   }
 
-  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, or selector row.", { inputLine });
+  throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, replace, or selector row.", { inputLine });
+}
+
+function parseReplacePatchOp(line: string, inputLine: number): ReplacePatchOp {
+  const first = parseReplaceJsonString(line, 1, inputLine);
+  const second = parseReplaceJsonString(line, first.nextIndex, inputLine);
+  const trailing = line.slice(second.nextIndex).trim();
+  if (trailing.length > 0) {
+    throw new InvalidPatchError("Malformed replace row. Expected exactly two JSON strings after r.", { inputLine });
+  }
+  if (first.value.length === 0) {
+    throw new InvalidPatchError("Malformed replace row. old text must be non-empty.", { inputLine });
+  }
+  if (hasLineBreak(first.value) || hasLineBreak(second.value)) {
+    throw new InvalidPatchError("Malformed replace row. Replacement text must stay within one line.", { inputLine });
+  }
+  return { kind: "replace", oldText: first.value, newText: second.value, inputLine, authoredCharCount: line.length };
+}
+
+function parseReplaceJsonString(line: string, startIndex: number, inputLine: number): { value: string; nextIndex: number } {
+  let index = skipAsciiSpaces(line, startIndex);
+  if (line[index] !== '"') {
+    throw new InvalidPatchError("Malformed replace row. Expected exactly two JSON strings after r.", { inputLine });
+  }
+  const stringStart = index;
+  index += 1;
+  let escaped = false;
+  while (index < line.length) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+    } else if (char === "\\") {
+      escaped = true;
+    } else if (char === '"') {
+      const jsonText = line.slice(stringStart, index + 1);
+      let value: unknown;
+      try {
+        value = JSON.parse(jsonText);
+      } catch {
+        throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
+      }
+      if (typeof value !== "string") {
+        throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
+      }
+      return { value, nextIndex: index + 1 };
+    }
+    index += 1;
+  }
+  throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
+}
+
+function skipAsciiSpaces(text: string, startIndex: number): number {
+  let index = startIndex;
+  while (text[index] === " ") index += 1;
+  return index;
+}
+
+function hasLineBreak(text: string): boolean {
+  return text.includes("\n") || text.includes("\r");
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {

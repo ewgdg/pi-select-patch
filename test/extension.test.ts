@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import piSelectPatch from "../src/index.js";
 
 describe("extension registration", () => {
-  it("uses smart profile by default while hiding read_hash and keeping write", async () => {
+  it("uses smart profile by default while hiding read_hash and edit and keeping write", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
@@ -61,7 +61,7 @@ describe("extension registration", () => {
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toContain("Add File");
       expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
       expect(activeTools).toContain("write");
-      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("edit");
       expect(activeTools).not.toContain("selector_read");
       expect(activeTools).not.toContain("selector_patch");
     } finally {
@@ -106,7 +106,7 @@ describe("extension registration", () => {
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
-      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("edit");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "Prefer short selectors plus accurate line anchors",
@@ -155,7 +155,7 @@ describe("extension registration", () => {
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("patch");
-      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("edit");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "Hash profile active",
