@@ -155,6 +155,7 @@ describe("patch visible status", () => {
     const description = patchParameterDescription();
 
     expect(description).toContain("<description>\nInline patch text.");
+    expect(description).toContain("Do not include `*** Begin Patch` or `*** End Patch` boundaries.");
     expect(description).toContain("### Hunk Match: Smart Profile");
     expect(description).toContain("<file_content>\nThis is a very long long long stable anchor\n</file_content>");
     expect(description).toContain("@@\n a long anchor\n+new line\n</patch>");
@@ -1013,24 +1014,23 @@ describe("patch visible status", () => {
     );
   });
 
-  it("rejects a closing patch boundary without an opening boundary", async () => {
-    const dir = await makeTempDir();
+  it("accepts a trailing closing boundary without an opening boundary", async () => {
+    const dir = await makePlainTempDir();
+    await writeFile(join(dir, "a.txt"), "old\n");
     const patch = [
       "*** Update File: a.txt",
       "@@",
-      "-missing",
+      "-old",
       "+replacement",
       "*** End Patch",
     ].join("\n");
 
-    const message = await rejectionMessage(
-      hashPatchTool.execute("tool-call", { patch }, undefined, undefined, {
-        cwd: dir,
-      } as never),
-    );
+    const result = await smartPatchTool.execute("tool-call", { patch }, undefined, undefined, {
+      cwd: dir,
+    } as never);
 
-    expect(message).toContain("[E_INVALID_PATCH] Line 5: Patch boundary is incomplete.");
-    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toBe(patch);
+    expect(resultText(result)).toContain("Applied");
+    await expect(readFile(join(dir, "a.txt"), "utf8")).resolves.toBe("replacement\n");
   });
 
   it("does not let retry patch write failure mask the patch failure", async () => {

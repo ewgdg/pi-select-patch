@@ -54,7 +54,7 @@ describe("universal patch parser", () => {
     expect(parsed.operations[0]).toMatchObject({ kind: "update", path: "existing.txt" });
   });
 
-  it("rejects stray patch boundaries", () => {
+  it("accepts a trailing closing boundary without an opening boundary", () => {
     const closingOnly = [
       "*** Update File: existing.txt",
       "@@",
@@ -62,6 +62,20 @@ describe("universal patch parser", () => {
       row("+", "new"),
       "*** End Patch"
     ].join("\n");
+
+    const parsed = parsePatchInput(closingOnly);
+
+    expect(parsed.operations).toHaveLength(1);
+    expect(parsed.operations[0]).toMatchObject({ kind: "update", path: "existing.txt" });
+    expect(copyUniversalPatchInputTail(parsed, 0)).toBe([
+      "*** Update File: existing.txt",
+      "@@",
+      row("-", "old"),
+      row("+", "new")
+    ].join("\n"));
+  });
+
+  it("rejects stray patch boundaries", () => {
     const nestedClosing = [
       "*** Begin Patch",
       "*** Update File: existing.txt",
@@ -71,7 +85,6 @@ describe("universal patch parser", () => {
       "*** End Patch"
     ].join("\n");
 
-    expect(() => parsePatchInput(closingOnly)).toThrow("Line 5: Patch boundary is incomplete.");
     expect(() => parsePatchInput(nestedClosing)).toThrow("Line 5: Unexpected patch boundary.");
   });
 

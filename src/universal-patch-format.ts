@@ -50,13 +50,15 @@ export function parseUniversalPatch(patchText: string, hashFn: HashFunction = ha
   const { lines, lineOffset } = normalizePatchInput(patchText);
   const hasOpeningBoundary = lines[0] === OPENING_BOUNDARY;
   const hasClosingBoundary = lines.at(-1) === CLOSING_BOUNDARY;
-  if (hasOpeningBoundary !== hasClosingBoundary) {
+  if (hasOpeningBoundary && !hasClosingBoundary) {
     throw new InvalidPatchError("Patch boundary is incomplete.", { inputLine: lineOffset + Math.max(lines.length, 1) });
   }
   const hasBoundaries = hasOpeningBoundary;
 
   const startIndex = hasBoundaries ? 1 : 0;
-  const endIndex = hasBoundaries ? lines.length - 1 : lines.length;
+  // Agents still sometimes append the old closing boundary to section-only patches.
+  // Treat one final closing boundary as harmless noise, but keep rejecting any inner boundary.
+  const endIndex = hasClosingBoundary ? lines.length - 1 : lines.length;
   rejectStrayPatchBoundaries(lines, startIndex, endIndex, lineOffset);
 
   const operations: UniversalPatchOperation[] = [];

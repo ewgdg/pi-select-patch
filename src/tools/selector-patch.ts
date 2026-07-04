@@ -64,7 +64,7 @@ function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
   return dedentBlock(`
     <description>
     Inline patch text. Mutually exclusive with \`patch_file\`.
-    No outer wrapper; start directly with a file section header. File sections have no closing delimiter; the next file section header or end of input ends the current section.
+    No outer wrapper; start directly with a file section header. Do not include \`*** Begin Patch\` or \`*** End Patch\` boundaries.
     ## File Sections
     A patch may contain multiple \`*** Update File\` sections;
     a file section header includes a file path.
