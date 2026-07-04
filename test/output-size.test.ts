@@ -100,7 +100,6 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Selector cost: 100.0%",
       ].join("\n"),
     );
     expect(resultText(result)).not.toContain(hugeReplacement);
@@ -133,7 +132,6 @@ describe("tool output size guards", () => {
       [
         "*** Update File: file.txt",
         "Applied",
-        "Selector cost: 100.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe(insertedRows.join("\n"));

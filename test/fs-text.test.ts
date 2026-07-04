@@ -86,7 +86,6 @@ describe("patch tool", () => {
       [
         "*** Update File: file.txt",
         "Validated",
-        "Selector cost: 100.0%",
       ].join("\n"),
     );
     await expect(readFile(file, "utf8")).resolves.toBe("old");
