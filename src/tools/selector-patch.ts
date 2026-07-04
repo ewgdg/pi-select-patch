@@ -77,6 +77,7 @@ function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
     Line number is 1-based.
     Line anchors define the allowed 1-based match span: [start, +inf) for \`@@ @<start>\`, or [start, end] for \`@@ @<start>...<end>\`.
 ${hunkMatchDescription}
+    Each context/delete selector row consumes exactly one target line. Adjacent selector rows must match adjacent target lines unless separated by a range row. Do not add separate keyword locator rows for the same physical line; shorten the selector row itself instead.
     ### Insertion
     Patch uses a leading "+" operator to insert lines.
     The "+" char must be first char of the line.
