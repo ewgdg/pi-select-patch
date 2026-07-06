@@ -76,11 +76,11 @@ Rows inside update hunks:
 - ` <selector>` — context line; used only for matching/anchoring.
 - `-<selector>` — delete matched line.
 - `+<content>` — insert literal line content.
-- `r"old" "new"` — replace literal text inside the previous context-selected line; arguments are JSON strings.
+- `/old` followed immediately by `=new` — replace literal text inside the previous context-selected line.
 
 Vocabulary:
 
-- **operator** — leading row syntax: space/omitted for context, `-` for delete, `+` for insert, `r` for intra-line replacement.
+- **operator** — leading row syntax: space/omitted for context, `-` for delete, `+` for insert, `/old`/`=new` for intra-line replacement.
 - **selector** — match payload after the context/delete operator, such as `:exact`, `^prefix`, `*contains`, `$suffix`, `?{...}`, `~smart`, hash, or `...` range.
 - **matcher / match row** — operator plus selector, e.g. ` ^prefix` or `-:old text`.
 
@@ -99,9 +99,9 @@ Selectors:
 In classic profile, hash prefix selector `#<hash>` is enabled by `receipt: "hash"`. Configured `profile: "hash"` uses bare hash selectors after unified-diff operators instead: ` <hash>` for context and `-<hash>` for delete. Hashes are 1 to 4 base64url characters, with visible width chosen from line entropy. In default smart/status mode, `#` is literal smart selector text. Use text selectors when content predicates are clearer.
 In classic profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
 
-Replace rows operate on the immediately previous context selector row. `old` must be non-empty and appear exactly once in the selected line; `new` may be empty. Replacement is literal, not regex.
+Replace rows operate on the immediately previous context selector row. `old` is raw text after `/`, must be non-empty, and must appear exactly once in the selected line; `new` is raw text after `=` and may be empty. Consecutive replacement pairs apply sequentially to that same selected line. Replacement is literal, not regex. Text starts immediately after the operator: `//old` means old text `/old`, and `==new` means new text `=new`.
 
-Classic profile explicit smart selectors use ` ~target text` or `~target text` for context, `-~old text` for delete. Configured `profile: "smart"` makes unified-diff context/delete selector text smart; marker-looking text like ` ~target` is literal smart context selector text. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is last and only runs for useful non-whitespace query length.
+Classic profile explicit smart selectors use ` ~target text` or omitted-space `~target text`; use `-~delete text` for delete. Configured `profile: "smart"` makes unified-diff context/delete selector text smart; marker-looking text like ` ~target` is literal smart context selector text. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is last and only runs for useful non-whitespace query length.
 
 Malformed unified-diff rows are tolerated per matcher in classic exact mode. Selector matching runs once; zero matches are stale and multiple matches are ambiguous. Within one `*** Update File` section, later hunks may match or span only untouched original target lines. They cannot anchor on or range across lines inserted or already used by earlier hunks in the same section. Use a later `*** Update File` section when a second edit must depend on prior output.
 

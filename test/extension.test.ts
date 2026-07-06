@@ -112,6 +112,8 @@ describe("extension registration", () => {
         "Prefer short selectors plus accurate line anchors",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("/old");
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("=new");
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
       expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
     } finally {

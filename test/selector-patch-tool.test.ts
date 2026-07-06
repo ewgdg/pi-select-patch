@@ -239,7 +239,8 @@ describe("patch visible status", () => {
       "*** Update File: file.txt",
       "@@",
       " timeoutMs",
-      'r"5000" "3000"',
+      "/5000",
+      "=3000",
       "*** End Patch",
     ].join("\n");
 

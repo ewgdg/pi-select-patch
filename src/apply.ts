@@ -284,7 +284,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       const replaceOps = followingReplaceOps(hunk.ops, opIndex);
       if (replaceOps.length > 0) {
         const replacedContent = applyLineReplaceOps(targetContent, replaceOps, hunkIndex, hunk);
-        const replacementPatchCharCount = replaceOps.reduce((total, replaceOp) => total + authoredCharCount(replaceOp, renderReplaceOp(replaceOp).length), 0);
+        const replacementPatchCharCount = replaceOps.reduce((total, replaceOp) => total + authoredCharCount(replaceOp, replaceOpAuthoredCharFallback(replaceOp)), 0);
         patchCharCount += replacementPatchCharCount;
         baselineCharCount += prefixedLineCharCount(replacedContent);
         replacement.push({ content: replacedContent, availableForHunkMatch: false });
@@ -645,8 +645,8 @@ function countOccurrences(content: string, needle: string): number {
   }
 }
 
-function renderReplaceOp(op: ReplacePatchOp): string {
-  return `r${JSON.stringify(op.oldText)} ${JSON.stringify(op.newText)}`;
+function replaceOpAuthoredCharFallback(op: ReplacePatchOp): number {
+  return op.oldText.length + op.newText.length + 2;
 }
 
 function renderMatchSelector(op: MatchPatchOp): string {

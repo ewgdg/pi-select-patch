@@ -57,7 +57,7 @@ describe("applyPatchToText", () => {
   it("applies literal replace rows to the previous context selector", () => {
     const result = applyPatchToText(
       "const timeoutMs = 5000;\nconst enabled = true;\n",
-      patch("~timeoutMs", 'r"5000" "3000"')
+      patch("~timeoutMs", "/5000", "=3000")
     );
 
     expect(result.text).toBe("const timeoutMs = 3000;\nconst enabled = true;\n");
@@ -73,18 +73,27 @@ describe("applyPatchToText", () => {
   it("chains literal replace rows on the same selected line", () => {
     const result = applyPatchToText(
       "const url = \"/api/v1/users\";\n",
-      patch("~url =", 'r"/api/v1" "/api/v2"', 'r"users" "accounts"')
+      patch("~url =", "//api/v1", "=/api/v2", "/users", "=accounts")
     );
 
     expect(result.text).toBe("const url = \"/api/v2/accounts\";\n");
   });
 
+  it("applies empty literal replacement text", () => {
+    const result = applyPatchToText(
+      "const label = prefixValue;\n",
+      patch("~label", "/prefix", "=")
+    );
+
+    expect(result.text).toBe("const label = Value;\n");
+  });
+
   it("rejects stale, ambiguous, and unbound literal replace rows", () => {
-    expect(() => applyPatchToText("const timeoutMs = 5000;", patch("~timeoutMs", 'r"6000" "3000"'))).toThrow(StaleHunkError);
-    expect(() => applyPatchToText("repeat repeat", patch("~repeat", 'r"repeat" "once"'))).toThrow(AmbiguousHunkError);
-    expect(() => applyPatchToText("const value = aaa;", patch("~value", 'r"aa" "b"'))).toThrow(AmbiguousHunkError);
-    expect(() => applyPatchToText("old", patch('r"old" "new"'))).toThrow(UnsupportedHunkError);
-    expect(() => applyPatchToText("old", patch("-old", 'r"old" "new"'))).toThrow(UnsupportedHunkError);
+    expect(() => applyPatchToText("const timeoutMs = 5000;", patch("~timeoutMs", "/6000", "=3000"))).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("repeat repeat", patch("~repeat", "/repeat", "=once"))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("const value = aaa;", patch("~value", "/aa", "=b"))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("old", patch("/old", "=new"))).toThrow("[E_INVALID_PATCH]");
+    expect(() => applyPatchToText("old", patch("-old", "/old", "=new"))).toThrow("[E_INVALID_PATCH]");
   });
 
   it("matches omitted-space context selector rows without unified-diff matching", () => {
@@ -465,11 +474,11 @@ describe("applyPatchToText", () => {
   });
 
   it("tries smart contains after prefix/suffix and reports hunk-level ambiguity", () => {
-    const result = applyPatchToText("x old value y", patch("-~old value"));
+    const result = applyPatchToText("x remove value y", patch("-~remove value"));
 
     expect(result.text).toBe("");
     expect(result.hunkAudits[0].matcherKinds).toEqual(["contains"]);
-    expect(() => applyPatchToText("x old value y\nz old value q", patch("-~old value"))).toThrow(AmbiguousHunkError);
+    expect(() => applyPatchToText("x remove value y\nz remove value q", patch("-~remove value"))).toThrow(AmbiguousHunkError);
   });
 
   it("tries smart whitespace token subsequence last", () => {

@@ -149,15 +149,57 @@ function normalizeParsePatchOptions(options: ParsePatchOptions): NormalizedParse
 }
 
 function parseHunkOperationLines(opLines: readonly PatchOperationLine[], hashFn: HashFunction, options: NormalizedParsePatchOptions): PatchOp[] {
-  return opLines.map((opLine) => parseHunkOperationLine(opLine.line, hashFn, opLine.inputLine, options));
+  const ops: PatchOp[] = [];
+  let replaceTargetAvailable = false;
+
+  for (let index = 0; index < opLines.length; index += 1) {
+    const opLine = opLines[index];
+    if (isReplaceNewRow(opLine.line)) {
+      throw new InvalidPatchError("Malformed replace row. =new must immediately follow a /old replace row.", { inputLine: opLine.inputLine });
+    }
+    if (isReplaceOldRow(opLine.line) && replaceTargetAvailable) {
+      const newLine = opLines[index + 1];
+      if (newLine === undefined || !isReplaceNewRow(newLine.line)) {
+        throw new InvalidPatchError("Malformed replace row. /old must be immediately followed by =new.", { inputLine: opLine.inputLine });
+      }
+      ops.push(parseReplacePatchPair(opLine, newLine));
+      index += 1;
+      continue;
+    }
+
+    const op = parseHunkOperationLine(opLine.line, hashFn, opLine.inputLine, options);
+    ops.push(op);
+    replaceTargetAvailable = op.kind === "context" || (op.kind === "replace" && replaceTargetAvailable);
+  }
+
+  return ops;
+}
+
+function isReplaceOldRow(line: string): boolean {
+  return line.startsWith("/");
+}
+
+function isReplaceNewRow(line: string): boolean {
+  return line.startsWith("=");
+}
+
+function parseReplacePatchPair(oldLine: PatchOperationLine, newLine: PatchOperationLine): ReplacePatchOp {
+  const oldText = oldLine.line.slice(1);
+  if (oldText.length === 0) {
+    throw new InvalidPatchError("Malformed replace row. old text must be non-empty after /.", { inputLine: oldLine.inputLine });
+  }
+  return {
+    kind: "replace",
+    oldText,
+    newText: newLine.line.slice(1),
+    inputLine: oldLine.inputLine,
+    authoredCharCount: oldLine.line.length + newLine.line.length
+  };
 }
 
 function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: number, options: NormalizedParsePatchOptions): PatchOp {
   if (line.startsWith("+")) {
     return parsePatchOp(line, hashFn, inputLine);
-  }
-  if (line.startsWith("r")) {
-    return parseReplacePatchOp(line, inputLine);
   }
   if (options.strictHashRows) {
     return parseHashProfileRow(line, inputLine);
@@ -289,64 +331,6 @@ function parsePatchOp(line: string, hashFn: HashFunction, inputLine: number): Pa
   }
 
   throw new InvalidPatchError("Malformed patch operation. Use context, delete, insert, replace, or selector row.", { inputLine });
-}
-
-function parseReplacePatchOp(line: string, inputLine: number): ReplacePatchOp {
-  const first = parseReplaceJsonString(line, 1, inputLine);
-  const second = parseReplaceJsonString(line, first.nextIndex, inputLine);
-  const trailing = line.slice(second.nextIndex).trim();
-  if (trailing.length > 0) {
-    throw new InvalidPatchError("Malformed replace row. Expected exactly two JSON strings after r.", { inputLine });
-  }
-  if (first.value.length === 0) {
-    throw new InvalidPatchError("Malformed replace row. old text must be non-empty.", { inputLine });
-  }
-  if (hasLineBreak(first.value) || hasLineBreak(second.value)) {
-    throw new InvalidPatchError("Malformed replace row. Replacement text must stay within one line.", { inputLine });
-  }
-  return { kind: "replace", oldText: first.value, newText: second.value, inputLine, authoredCharCount: line.length };
-}
-
-function parseReplaceJsonString(line: string, startIndex: number, inputLine: number): { value: string; nextIndex: number } {
-  let index = skipAsciiSpaces(line, startIndex);
-  if (line[index] !== '"') {
-    throw new InvalidPatchError("Malformed replace row. Expected exactly two JSON strings after r.", { inputLine });
-  }
-  const stringStart = index;
-  index += 1;
-  let escaped = false;
-  while (index < line.length) {
-    const char = line[index];
-    if (escaped) {
-      escaped = false;
-    } else if (char === "\\") {
-      escaped = true;
-    } else if (char === '"') {
-      const jsonText = line.slice(stringStart, index + 1);
-      let value: unknown;
-      try {
-        value = JSON.parse(jsonText);
-      } catch {
-        throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
-      }
-      if (typeof value !== "string") {
-        throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
-      }
-      return { value, nextIndex: index + 1 };
-    }
-    index += 1;
-  }
-  throw new InvalidPatchError("Malformed replace row. Expected valid JSON strings after r.", { inputLine });
-}
-
-function skipAsciiSpaces(text: string, startIndex: number): number {
-  let index = startIndex;
-  while (text[index] === " ") index += 1;
-  return index;
-}
-
-function hasLineBreak(text: string): boolean {
-  return text.includes("\n") || text.includes("\r");
 }
 
 function parseSelectorPatchOp(kind: MatchPatchOpKind, selector: string, line: string, inputLine: number): PatchOp {

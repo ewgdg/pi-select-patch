@@ -58,8 +58,8 @@ describe("patch parser", () => {
     if (op.kind === "insert") expect(op.content).toBe("a│b");
   });
 
-  it("parses literal replace rows from two JSON strings", () => {
-    const parsed = parsePatch(["@@", " target line", 'r"old" "new"'].join("\n"), undefined, 0, { profile: "smart" });
+  it("parses literal replace rows from /old and =new rows", () => {
+    const parsed = parsePatch(["@@", " target line", "/old", "=new"].join("\n"), undefined, 0, { profile: "smart" });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "target line" },
@@ -67,9 +67,42 @@ describe("patch parser", () => {
     ]);
   });
 
+  it("allows empty replacement text in literal replace rows", () => {
+    const parsed = parsePatch(["@@", " target line", "/old", "="].join("\n"), undefined, 0, { profile: "smart" });
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "target line" },
+      { kind: "replace", oldText: "old", newText: "" },
+    ]);
+  });
+
+  it("keeps replacement row text raw after markers", () => {
+    const parsed = parsePatch(["@@", " target line", "/ old value ", "= new value "].join("\n"), undefined, 0, { profile: "smart" });
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "target line" },
+      { kind: "replace", oldText: " old value ", newText: " new value " },
+    ]);
+  });
+
+  it("keeps literal replacement marker characters after the row operators", () => {
+    const parsed = parsePatch(["@@", " target line", "//old", "==new"].join("\n"), undefined, 0, { profile: "smart" });
+
+    expect(parsed.hunks[0].ops).toMatchObject([
+      { kind: "context", content: "target line" },
+      { kind: "replace", oldText: "/old", newText: "=new" },
+    ]);
+  });
+
   it("rejects malformed literal replace rows", () => {
-    for (const row of ["r", 'r"" "new"', 'r"old"', 'r"old" "new" extra', 'r"a\\n" "b"']) {
-      expect(() => parsePatch(["@@", " target line", row].join("\n"), undefined, 0, { profile: "smart" })).toThrow("[E_INVALID_PATCH]");
+    for (const patchLines of [
+      ["@@", " target line", "/", "=new"],
+      ["@@", " target line", "/old"],
+      ["@@", " target line", "/old", " +not-new"],
+      ["@@", " target line", "=new"],
+      ["@@", "/old", "=new"]
+    ]) {
+      expect(() => parsePatch(patchLines.join("\n"), undefined, 0, { profile: "smart" })).toThrow("[E_INVALID_PATCH]");
     }
   });
 
@@ -226,11 +259,11 @@ describe("patch parser", () => {
   });
 
   it("parses unified-diff-style rows with the smart profile", () => {
-    const parsed = parsePatch(["@@", " target text", "-old text", "+new"].join("\n"), undefined, 0, { profile: "smart" });
+    const parsed = parsePatch(["@@", " target text", "-delete text", "+new"].join("\n"), undefined, 0, { profile: "smart" });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "target text", textSelector: "exact", smart: true },
-      { kind: "delete", content: "old text", textSelector: "exact", smart: true },
+      { kind: "delete", content: "delete text", textSelector: "exact", smart: true },
       { kind: "insert", content: "new" }
     ]);
   });
@@ -285,7 +318,7 @@ describe("patch parser", () => {
 
   it("allows only hash, range, insert, and replace rows in strict hash mode", () => {
     const hash = hashLine("old").slice(0, 3);
-    const parsed = parsePatch(`@@\n ${hash}\nr"old" "new"\n-${hash}\n ...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
+    const parsed = parsePatch(`@@\n ${hash}\n/old\n=new\n-${hash}\n ...\n-...\n+literal`, undefined, 0, { strictHashRows: true });
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", hash },
@@ -298,7 +331,7 @@ describe("patch parser", () => {
   });
 
   it("rejects text selectors and unified-diff rows in strict hash mode", () => {
-    for (const row of [" :text", "^text", " *text", "-~old", " text longer", "-old value"]) {
+    for (const row of [" :text", "^text", " *text", "-~delete", " text longer", "-old value"]) {
       expect(() => parsePatch(["@@", row].join("\n"), undefined, 0, { strictHashRows: true })).toThrow("[E_INVALID_PATCH]");
     }
   });
@@ -331,12 +364,12 @@ describe("patch parser", () => {
   });
 
   it("accepts smart context/delete selectors and leaves smart-looking inserts literal", () => {
-    const parsed = parsePatch(["@@", " ~target text", "~omitted context", "-~old text", "+~literal insert"].join("\n"));
+    const parsed = parsePatch(["@@", "~target text", "~omitted context", "-~delete text", "+~literal insert"].join("\n"));
 
     expect(parsed.hunks[0].ops).toMatchObject([
       { kind: "context", content: "target text", textSelector: "exact", smart: true },
       { kind: "context", content: "omitted context", textSelector: "exact", smart: true },
-      { kind: "delete", content: "old text", textSelector: "exact", smart: true },
+      { kind: "delete", content: "delete text", textSelector: "exact", smart: true },
       { kind: "insert", content: "~literal insert" }
     ]);
   });

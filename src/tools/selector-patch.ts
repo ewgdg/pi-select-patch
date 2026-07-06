@@ -85,8 +85,8 @@ ${hunkMatchDescription}
     Only hunk sections may insert lines.
 
     ### Intra-line replacement
-    Use \`r\"old\" \"new\"\` after a context selector to literally replace text inside the previously selected line.
-    Both arguments are JSON strings. \`old\` must be non-empty and appear exactly once in the selected line. \`new\` may be empty. Replacement rows do not use regex.
+    Use a \`/old\` row immediately followed by a \`=new\` row after a context selector to literally replace text inside the previously selected line.
+    \`old\` is raw text after \`/\`, must be non-empty, and must appear exactly once in the selected line. \`new\` is raw text after \`=\` and may be empty. Text starts immediately after the operator: \`//old\` means old text is \`/old\`, and \`==new\` means new text is \`=new\`. Consecutive replacement pairs apply sequentially to that same selected line. Replacement rows do not use regex.
     </description>
 
     <caveats>
@@ -111,7 +111,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     return dedentBlock(`
       ### Hunk Match: Smart Profile
       Context/delete rows use smart selectors after a required unified-diff operator.
-      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or \`r\` for intra-line replacement on the previous context row.
+      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or a \`/old\`/\`=new\` pair for intra-line replacement on the previous context row.
       Use \` <selector>\` rows for context and \`-<selector>\` rows for deletes. A bare selector line like \`selector text\` is invalid because it is missing the leading space operator.
       Use a blank hunk row or single-space row for blank context; use \`-\` to delete a blank line.
       Smart selectors resolve independently through resolver tiers: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence; The whole hunk applies only with one dominance winner.
@@ -122,7 +122,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     return dedentBlock(`
       ### Hunk Match: Hash Profile
       Context/delete rows identify lines by hash after a required unified-diff operator.
-      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or \`r\` for intra-line replacement on the previous context row.
+      Every hunk body row must start with an operator: literal space for context, \`-\` for delete, \`+\` for insert, or a \`/old\`/\`=new\` pair for intra-line replacement on the previous context row.
       Copy only the 1- to 4-character hash from \`HASH│content\` read output, not the separator or content.
       Use \` <hash>\` for context and \`-<hash>\` for deletes. A bare hash line like \`abc\` is invalid because it is missing the leading space operator.
       Use only the hash characters from read output; omit \`#\`.
@@ -132,7 +132,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
   return dedentBlock(`
     ### Hunk Match: Classic Profile
     A hunk contains line matchers. A matcher / match row is operator plus selector.
-    Every hunk body row must start with an operator: literal space for context, "-" for delete, "+" for insert, or "r" for intra-line replacement on the previous context row.
+    Every hunk body row must start with an operator: literal space for context, "-" for delete, "+" for insert, or a "/old"/"=new" pair for intra-line replacement on the previous context row.
     Match operators are "-" for delete and literal space " " for context. Insert rows use "+" plus literal content and have no selector.
     Context selector rows may omit the leading space when the row starts with a selector marker.
     Selector markers:
@@ -140,7 +140,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     - \`:<text>\`: exact raw line match
     - \`$<suffix>\`: suffix match
     - \`*<text>\`: contains match
-    - \`~<text>\`: smart match
+    - \`~<text>\`: smart match for context rows
     - \`#<hash>\`: hash match when hash selectors are enabled by \`receipt: "hash"\`
     - \`?<json-obj>\`: combined selector with \`prefix\`, \`contains\`, and/or \`suffix\`
     - \`...\`: range row; use \`...\` for context range and \`-...\` for delete range
