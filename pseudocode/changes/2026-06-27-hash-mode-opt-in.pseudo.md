@@ -23,7 +23,7 @@ on session start:
   enable read_hash and patch
 
 when patch succeeds or dry-run validates:
-  if profile is classic:
+  if profile is explicit:
     print compact operation status rows
     return
 

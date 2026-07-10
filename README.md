@@ -1,35 +1,108 @@
 # pi-select-patch
 
-Pi extension for token-efficient file edits using explicit selector patches.
+Pi extension for token-efficient file edits using various efficient selectors.
 
-The package registers `patch` for multi-file update patch application. Use the built-in `write` tool for new files. Patch input uses file operation sections directly; legacy `*** Begin Patch` / `*** End Patch` boundaries are accepted only as a matching outer pair. Only `profile: "hash"` exposes the hash-line reader as `read`; otherwise `read_hash` stays hidden and built-in `read` stays active.
+File edits by coding agents often spend more tokens repeating unchanged code than describing the change. `pi-select-patch` exists to cut that waste.
 
-Core design: keep patches short while staying exact. Use concise selectors and ` ...` / `-...` to skip or replace large unchanged ranges. Ambiguous or stale hunks fail instead of guessing.
+Design goal: make the smallest patch that still identifies one exact place. Agents should send only the useful anchors and changed lines, not copy whole functions for context.
 
-On session start, the extension keeps the built-in `write` tool active, hides the built-in `edit` tool, and removes `read_hash` plus stale selector tool names (`selector_read`, `selector_patch`). Built-in `read` remains active unless `profile: "hash"` is enabled; then hash-line `read` replaces it.
+Smart profile is the default and intended way to use the extension. Its selectors can be short, sampled pieces of a target line. The matcher works out whether each piece is an exact match, prefix, suffix, contained text, token subsequence, fuzzy token subsequence, or character subsequence.
 
-## Profiles
+Short does not mean loose. A hunk applies only when its selectors identify one winner. Ambiguous or stale patches fail instead of guessing.
 
-Profiles control session defaults and read registration. Default is `smart`: built-in `read` stays active and unified-diff selector text is smart by default. `classic` keeps built-in `read` and exact/status patch defaults. `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
+## Smart selectors
 
-Override in `~/.pi/agent/extensions/pi-select-patch/config.json`:
+No configuration needed. Smart profile is active by default and keeps Pi's built-in `read` tool.
 
-```json
-{
-  "profile": "smart"
-}
+Patch rows retain familiar diff operators:
+
+- ` <selector>` matches a context line.
+- `-<selector>` matches and deletes a line.
+- `+<content>` inserts literal content.
+- ` ...` preserves the range between surrounding selectors.
+- `-...` deletes the range between surrounding selectors.
+- `/old` followed by `=new` replaces text inside the previous matched line.
+
+Selector text does not need a match-type marker. Start with the shortest readable fragment likely to identify the line. Add another selector, more text, or a line-range hint only when needed to remove ambiguity.
+
+```diff
+*** Update File: src/config.ts
+@@
+ function loadConfig
+-const timeoutMs = 5000
++const timeoutMs = 3000
 ```
 
-Quick switch for testing:
+Smart matching tries stronger interpretations before weaker ones:
 
-```bash
-PI_SELECT_PATCH_PROFILE=smart pi   # force smart patch defaults
-PI_SELECT_PATCH_PROFILE=hash pi    # force hash-line read and hash patch defaults
+1. exact
+2. prefix or suffix
+3. contained text
+4. whitespace token subsequence
+5. bounded fuzzy token subsequence
+6. character subsequence
+
+Each row resolves independently. The whole hunk must still have one unambiguous match.
+
+## Token-saving toolbox
+
+### Short sampled selectors
+
+A selector can keep only distinctive words or characters from a long line:
+
+```diff
+*** Update File: src/client.ts
+@@
+-long_obj.long_call(arg)
++replacement(arg)
+```
+
+The sampled selector can match `long_object_name.long_function_call(long_arg_name)` without repeating the full line.
+
+### Sparse ranges
+
+Use ranges instead of listing a large unchanged or deleted block:
+
+```diff
+*** Update File: src/legacy.ts
+@@
+ function legacyHandler
+-{
+-...
+-return result
+-}
+```
+
+### Line-range hints
+
+Limit matching to a known part of a file without copying extra context:
+
+```diff
+*** Update File: src/server.ts
+@@ @120...160
+ timeoutMs
+/5000
+=3000
+```
+
+### Multi-file patches
+
+One call can update several files. File sections run in authored order.
+
+```diff
+*** Update File: src/config.ts
+@@
+-old value
++new value
+*** Update File: test/config.test.ts
+@@
+-old expectation
++new expectation
 ```
 
 ## `patch`
 
-`patch` accepts file-operation patch text. Provide exactly one of `patch` or `patch_file`; `patch_file` and file paths inside the patch resolve from the tool cwd. Prefer concise, unique selectors over long copied context.
+Provide exactly one of `patch` or `patch_file`. Patch files and target file paths resolve from tool working directory.
 
 ```ts
 {
@@ -40,82 +113,30 @@ PI_SELECT_PATCH_PROFILE=hash pi    # force hash-line read and hash patch default
 }
 ```
 
-Configured `profile` sets patch defaults. Classic profile is markerful: it parses explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled). Smart and hash profiles keep unified-diff operators: context rows start with a space, delete rows start with `-`, and only the selector text after the operator changes meaning. `receipt` overrides the configured profile receipt default for one call.
+File operations:
 
-```diff
-*** Update File: existing.txt
-@@
- :exact context text
--*needle to delete by containment
-+literal inserted line
-@@ @120...140
- :start context text
- ...
-+literal insertion after skipped context
- :end context text
-```
-
-### File operations
-
-- `*** Update File: path` applies selector hunks to an existing UTF-8 text file.
-- Use the built-in `write` tool to create new files.
-- `*** Delete File: path` is not supported; use an explicit shell command for whole-file deletion when needed.
-
-Multiple operations may target the same path. File operations run in authored order, so a later `*** Update File` section can match output created by an earlier section.
-
-### Update hunks
+- `*** Update File: path` updates existing UTF-8 text files.
+- Use Pi's built-in `write` tool for new files.
+- Whole-file deletion is not supported by `patch`.
 
 Hunk headers:
 
-- `@@` — search whole file.
-- `@@ @<line>` — search at or after 1-based line.
-- `@@ @<start>...<end>` — require resolved match span inside inclusive line range.
+- `@@` searches whole file.
+- `@@ @<line>` searches at or after a 1-based line.
+- `@@ @<start>...<end>` keeps resolved match inside an inclusive line range.
 
-Rows inside update hunks:
+Within one file section, later hunks can only match untouched original lines. Use another `*** Update File` section for same path when a later edit must depend on earlier output.
 
-- ` <selector>` — context line; used only for matching/anchoring.
-- `-<selector>` — delete matched line.
-- `+<content>` — insert literal line content.
-- `/old` followed immediately by `=new` — replace literal text inside the previous context-selected line.
+## Failure behavior
 
-Vocabulary:
+Zero matches mean patch is stale. Multiple equally valid matches mean patch is ambiguous. Both fail without changing that operation.
 
-- **operator** — leading row syntax: space/omitted for context, `-` for delete, `+` for insert, `/old`/`=new` for intra-line replacement.
-- **selector** — match payload after the context/delete operator, such as `:exact`, `^prefix`, `*contains`, `$suffix`, `?{...}`, `~smart`, hash, or `...` range.
-- **matcher / match row** — operator plus selector, e.g. ` ^prefix` or `-:old text`.
+File operations apply sequentially. If a later operation fails, earlier successful operations remain applied and later operations are skipped. Error includes a retry patch containing failed and skipped operations, avoiding need to resend whole original patch.
 
-Profile decides how selector text after the unified-diff operator is parsed. Classic profile is markerful and preserves unified-diff exact fallback (` text` / `-text`; bare exact context is invalid). Smart profile parses context/delete selector text as smart text. Hash profile parses context/delete selector text as hashes.
+Dry runs validate and return normal receipt shape without writing.
 
-Selectors:
+## Pi integration
 
-- `:<text>` exact line text, e.g. ` :const x = 1;`
-- `^<prefix>` line starts with prefix.
-- `*<needle>` line contains text.
-- `$<suffix>` line ends with suffix.
-- `?{...}` combined JSON selector with `prefix`, `contains`, and/or `suffix`.
-- `~<text>` opt-in smart text selector for context/delete rows.
-- `...` range between surrounding matchers: ` ...` preserves, `-...` deletes.
+Extension registers `patch`, keeps built-in `write`, and hides built-in `edit` plus old selector tool names. Smart profile also keeps built-in `read`.
 
-In classic profile, hash prefix selector `#<hash>` is enabled by `receipt: "hash"`. Configured `profile: "hash"` uses bare hash selectors after unified-diff operators instead: ` <hash>` for context and `-<hash>` for delete. Hashes are 1 to 4 base64url characters, with visible width chosen from line entropy. In default smart/status mode, `#` is literal smart selector text. Use text selectors when content predicates are clearer.
-In classic profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines.
-
-Replace rows operate on the immediately previous context selector row. `old` is raw text after `/`, must be non-empty, and must appear exactly once in the selected line; `new` is raw text after `=` and may be empty. Consecutive replacement pairs apply sequentially to that same selected line. Replacement is literal, not regex. Text starts immediately after the operator: `//old` means old text `/old`, and `==new` means new text `=new`.
-
-Classic profile explicit smart selectors use ` ~target text` or omitted-space `~target text`; use `-~delete text` for delete. Configured `profile: "smart"` makes unified-diff context/delete selector text smart; marker-looking text like ` ~target` is literal smart context selector text. `+~literal` inserts literal `~literal`. For each candidate hunk span, each smart row independently resolves to its strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Prefix and suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is last and only runs for useful non-whitespace query length.
-
-Malformed unified-diff rows are tolerated per matcher in classic exact mode. Selector matching runs once; zero matches are stale and multiple matches are ambiguous. Within one `*** Update File` section, later hunks may match or span only untouched original target lines. They cannot anchor on or range across lines inserted or already used by earlier hunks in the same section. Use a later `*** Update File` section when a second edit must depend on prior output.
-
-### Output and failure behavior
-
-With `profile: "hash"` or `receipt: "hash"`, success output is a compact hash-only receipt. Context rows show only hashes, inserted rows show `+HASH`, and deleted rows are omitted:
-
-```text
-*** Update File: existing.txt
-@@ matched line 12 @@
- Abc1
-+Z9xQ
-```
-
-If this receipt is too large, output falls back to compact status rows. Dry runs return the same receipt shape without writing. With status receipt, success output is compact status rows only.
-
-File operations apply sequentially. If a later non-dry operation fails, earlier successful operations stay applied, later operations are skipped, and the error includes a **retry patch** file copied from the authored failed operation plus skipped later operations. Agents can later reuse the retry patch file to avoid re-emitting large output tokens.
+Alternative profiles and full format details live in [docs/patch-format.md](docs/patch-format.md). Smart profile remains recommended default.

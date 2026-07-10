@@ -18,7 +18,7 @@ Let config choose profile defaults for markerless context/delete rows, while per
 ```pseudo
 Define markerless selector kinds: exact, smart, hash, prefix, contains.
 Define patch profiles:
-  classic -> markerless selector exact, status receipt
+  explicit -> markerless selector exact, status receipt
   smart   -> markerless selector smart, status receipt; default configured profile
   hash    -> markerless selector hash, hash receipt
 

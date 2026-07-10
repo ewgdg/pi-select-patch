@@ -133,7 +133,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     `);
   }
   return dedentBlock(`
-    ### Hunk Match: Classic Profile
+    ### Hunk Match: Explicit Profile
     A hunk contains line matchers. A matcher / match row is operator plus selector.
     Every hunk body row must start with an operator: literal space for context, "-" for delete, "+" for insert, or a "/old"/"=new" pair for intra-line replacement on the previous context row.
     Match operators are "-" for delete and literal space " " for context. Insert rows use "+" plus literal content and have no selector.
@@ -147,7 +147,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
     - \`#<hash>\`: hash match when hash selectors are enabled by \`receipt: "hash"\`
     - \`?<json-obj>\`: combined selector with \`prefix\`, \`contains\`, and/or \`suffix\`
     - \`...\`: range row; use \`...\` for context range and \`-...\` for delete range
-    If no selector marker follows the operator, classic profile uses exact unified-diff matching: \` text\` is exact context and \`-text\` is exact delete. Bare exact context text like \`text\` is invalid because it is missing the leading space operator.
+    If no selector marker follows the operator, explicit profile uses exact unified-diff matching: \` text\` is exact context and \`-text\` is exact delete. Bare exact context text like \`text\` is invalid because it is missing the leading space operator.
   `);
 }
 
@@ -347,7 +347,7 @@ const PATCH_PROFILE_DEFAULTS: Record<
   SelectorPatchProfile,
   PatchProfileDefaults
 > = {
-  classic: { receipt: "status" },
+  explicit: { receipt: "status" },
   smart: { receipt: "status" },
   hash: { receipt: "hash" },
 };
@@ -497,7 +497,7 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
       Start with the smallest set of short selectors that can uniquely identify the hunk.
       Minimize selector text and unnecessary selector rows; surrounding short context provides safety without copied full lines.
       ${buildPatchProfilePromptGuideline(profile)}
-      ${profile === "classic" ? "Classic profile supports explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
+      ${profile === "explicit" ? "Explicit profile supports selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}
       Use range selector whenever possible for spans over 3 lines.
       Use line anchors to disambiguate only when based on the latest accurate line offset. For \`@@ @<start>\`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For \`@@ @<start>...<end>\`, expand both bounds with a safety margin for expected line drift.

@@ -37,6 +37,14 @@ describe("select patch config", () => {
     });
   });
 
+  it("reads the explicit selector profile", async () => {
+    await makeAgentDir({ profile: "explicit" });
+
+    await expect(readSelectorPatchConfig()).resolves.toEqual({
+      profile: "explicit",
+    });
+  });
+
   it("ignores project settings", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-select-patch-project-"));
     await mkdir(join(cwd, ".pi"));

@@ -311,7 +311,7 @@ describe("patch parser", () => {
     expect(() => parsePatch(`@@\n-#${hash}`, undefined, 0, { profile: "hash" })).toThrow("Malformed delete hash selector");
   });
 
-  it("keeps classic default behavior and rejects malformed hash profile rows", () => {
+  it("keeps explicit default behavior and rejects malformed hash profile rows", () => {
     expect(() => parsePatch("@@\ncontext")).toThrow("[E_INVALID_PATCH]");
     expect(() => parsePatch("@@\nnot-a-hash", undefined, 0, { profile: "hash" })).toThrow("Malformed patch operation");
   });

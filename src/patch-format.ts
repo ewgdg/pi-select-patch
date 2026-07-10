@@ -65,7 +65,7 @@ export interface Patch {
   hunks: Hunk[];
 }
 
-export type PatchParseProfile = "classic" | "smart" | "hash";
+export type PatchParseProfile = "explicit" | "smart" | "hash";
 
 export interface ParsePatchOptions {
   hashSelectorsEnabled?: boolean;
@@ -137,8 +137,8 @@ interface PatchOperationLine {
 }
 
 function normalizeParsePatchOptions(options: ParsePatchOptions): NormalizedParsePatchOptions {
-  const profile = options.profile ?? "classic";
-  if (profile !== "classic" && profile !== "smart" && profile !== "hash") {
+  const profile = options.profile ?? "explicit";
+  if (profile !== "explicit" && profile !== "smart" && profile !== "hash") {
     throw new InvalidPatchError(`Unsupported patch parse profile: ${String(profile)}.`);
   }
   return {
@@ -207,10 +207,10 @@ function parseHunkOperationLine(line: string, hashFn: HashFunction, inputLine: n
   if (options.profile === "smart") {
     return parseSmartProfileRow(line, inputLine);
   }
-  return parseClassicMarkerfulRow(line, hashFn, inputLine, options.hashSelectorsEnabled);
+  return parseExplicitMarkerfulRow(line, hashFn, inputLine, options.hashSelectorsEnabled);
 }
 
-function parseClassicMarkerfulRow(line: string, hashFn: HashFunction, inputLine: number, hashSelectorsEnabled: boolean): PatchOp {
+function parseExplicitMarkerfulRow(line: string, hashFn: HashFunction, inputLine: number, hashSelectorsEnabled: boolean): PatchOp {
   if (line === "") {
     return parseUnifiedDiffOp(line, hashFn, inputLine);
   }

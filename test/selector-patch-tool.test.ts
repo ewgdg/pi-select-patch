@@ -6,7 +6,7 @@ import { hashLine, parseText } from "../src/api.js";
 import { createPatchTool } from "../src/tools/selector-patch.js";
 
 const smartPatchTool = createPatchTool("smart");
-const classicPatchTool = createPatchTool("classic");
+const explicitPatchTool = createPatchTool("explicit");
 const hashPatchTool = createPatchTool("hash");
 
 async function makePlainTempDir() {
@@ -16,9 +16,9 @@ async function makePlainTempDir() {
   return dir;
 }
 
-async function makeClassicTempDir() {
+async function makeExplicitTempDir() {
   const dir = await makePlainTempDir();
-  process.env.PI_SELECT_PATCH_PROFILE = "classic";
+  process.env.PI_SELECT_PATCH_PROFILE = "explicit";
   return dir;
 }
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -102,10 +102,10 @@ async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
 }
 
 async function patchFile(initialText: string, diff: string, path = "file.txt") {
-  const dir = await makeClassicTempDir();
+  const dir = await makeExplicitTempDir();
   const file = join(dir, path);
   await writeFile(file, initialText);
-  const result = await classicPatchTool.execute(
+  const result = await explicitPatchTool.execute(
     "tool-call",
     {
       patch: diff.startsWith("*** Begin Patch")

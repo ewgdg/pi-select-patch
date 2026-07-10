@@ -6,7 +6,7 @@ export interface SelectorPatchConfig {
   profile: SelectorPatchProfile;
 }
 
-export type SelectorPatchProfile = "classic" | "smart" | "hash";
+export type SelectorPatchProfile = "explicit" | "smart" | "hash";
 
 export const DEFAULT_PROFILE: SelectorPatchProfile = "smart";
 
@@ -19,8 +19,8 @@ const EXTENSION_CONFIG_PATH = [
 
 export async function readSelectorPatchConfig(): Promise<SelectorPatchConfig> {
   const globalConfig = await readConfigJson(globalConfigPath());
-  const explicitProfile = readEnvProfile() ?? readProfile(globalConfig);
-  const profile = explicitProfile ?? DEFAULT_PROFILE;
+  const configuredProfile = readEnvProfile() ?? readProfile(globalConfig);
+  const profile = configuredProfile ?? DEFAULT_PROFILE;
   return { profile };
 }
 
@@ -52,7 +52,7 @@ function parseProfile(value: unknown): SelectorPatchProfile | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().toLowerCase();
   if (
-    normalized === "classic" ||
+    normalized === "explicit" ||
     normalized === "smart" ||
     normalized === "hash"
   )
