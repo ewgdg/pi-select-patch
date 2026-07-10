@@ -55,7 +55,7 @@ describe("extension registration", () => {
       expect(activeTools).toContain("patch");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
-        "Prefer short selectors plus accurate line anchors",
+        "Prefer a larger hunk with several neighboring short selectors",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toContain("Add File");
@@ -109,7 +109,7 @@ describe("extension registration", () => {
       expect(activeTools).not.toContain("edit");
       expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
-        "Prefer short selectors plus accurate line anchors",
+        "Prefer a larger hunk with several neighboring short selectors",
       );
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
       expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("/old");

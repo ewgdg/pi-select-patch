@@ -156,6 +156,8 @@ describe("patch visible status", () => {
 
     expect(description).toContain("<description>\nInline patch text.");
     expect(description).toContain("Do not include `*** Begin Patch` or `*** End Patch` boundaries.");
+    expect(description).toContain("Line anchors are hard search boundaries, not proximity hints.");
+    expect(description).toContain("They do not select the closest match.");
     expect(description).toContain("### Hunk Match: Smart Profile");
     expect(description).toContain("<file_content>\nThis is a very long long long stable anchor\n</file_content>");
     expect(description).toContain("@@\n a long anchor\n+new line\n</patch>");
@@ -168,7 +170,13 @@ describe("patch visible status", () => {
     const guideline = smartPatchTool.promptGuidelines?.[0] ?? "";
 
     expect(guideline).toContain("<patch_tool_policy>");
-    expect(guideline).toContain("Prefer short selectors plus accurate line anchors");
+    expect(guideline).toContain("larger hunk with several neighboring short selectors");
+    expect(guideline).toContain("when this reduces total patch text");
+    expect(guideline).not.toContain("Prefer short selectors plus accurate line anchors");
+    expect(guideline).not.toContain("or an anchor hint");
+    expect(guideline).toContain("safety margin");
+    expect(guideline).toContain("upward line drift");
+    expect(guideline).toContain("Wider margins may reintroduce ambiguity");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
     expect(guideline).toContain("</patch_tool_policy>");

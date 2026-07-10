@@ -76,6 +76,8 @@ function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
     ### Line Anchor
     A line anchor can be appended to a hunk header.
     Line number is 1-based.
+    Line anchors are hard search boundaries, not proximity hints.
+    They do not select the closest match.
     Line anchors define the allowed 1-based match span: [start, +inf) for \`@@ @<start>\`, or [start, end] for \`@@ @<start>...<end>\`.
 ${hunkMatchDescription}
     Each context/delete selector row consumes exactly one target line. Adjacent selector rows must match adjacent target lines unless separated by a range row. Do not add separate keyword locator rows for the same physical line; shorten the selector row itself instead.
@@ -151,7 +153,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
 
 function buildPatchProfilePolicy(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
-    return "Always prefer short prefix or sampled-word subsequence selectors over full-line exact selectors. Include enough neighboring smart context or an anchor hint when text may repeat. Sample n words from a line to form a subsequence match, where n <= 0.5 * total word count. Use full-line exact selectors only when the target line is already short or needed to disambiguate.";
+    return "Always prefer short prefix or sampled-word subsequence selectors over full-line exact selectors. Include enough neighboring smart context when text may repeat. Sample n words from a line to form a subsequence match, where n <= 0.5 * total word count. Use full-line exact selectors only when the target line is already short or needed to disambiguate.";
   }
   if (profile === "hash") {
     return "Prefer the shortest unique hash width available from `read`. Use ` ...`/`-...` ranges to avoid listing many unchanged/deleted hashes.";
@@ -488,14 +490,14 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
   return [
     dedentBlock(`
       <patch_tool_policy>
-      Prefer short selectors plus accurate line anchors when available over long exact selectors.
+      Prefer a larger hunk with several neighboring short selectors over a smaller hunk with fewer long exact selectors when this reduces total patch text.
       Short selectors do not imply high error rate when surrounding context disambiguates the hunk.
       Long selectors usually cost more than their small error-rate drop is worth.
       ${buildPatchProfilePromptGuideline(profile)}
       ${profile === "classic" ? "Classic profile supports explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}
       Use range selector whenever possible for spans over 3 lines.
-      Use line anchors to disambiguate only if the latest accurate line offset is available or add extra redundancy to the anchors.
+      Use line anchors to disambiguate only when based on the latest accurate line offset. For \`@@ @<start>\`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For \`@@ @<start>...<end>\`, expand both bounds with a safety margin for expected line drift.
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
       </patch_tool_policy>
     `),
