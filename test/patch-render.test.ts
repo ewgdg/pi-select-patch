@@ -7,7 +7,7 @@ import {
   buildPatchCallRenderText,
   buildPatchResultRenderText,
   formatPatchResultDiff,
-  getPatchCharEfficiency,
+  getPatchSize,
   getPatchSelectorEfficiency,
   getPatchMatcherStats,
   getPatchDiffStats,
@@ -136,14 +136,14 @@ describe("patch renderer helpers", () => {
     expect(rendered).toContain("<muted>Matchers: prefix 1 / subsequence 1 / fuzzy 1 / char-subsequence 1 / unified-diff 2</muted>");
   });
 
-  it("reads and renders patch char efficiency from result details", () => {
+  it("reads and renders full patch size without selector cost", () => {
     const details = {
-      charEfficiency: { patchChars: 5, baselineChars: 9 },
+      patchSize: { patchChars: 142, unifiedDiffChars: 211 },
       selectorEfficiency: { patchChars: 7, baselineChars: 10 },
       diff: "--- a/file\n+++ b/file\n-old text\n+new"
     };
 
-    expect(getPatchCharEfficiency(details)).toEqual({ patchChars: 5, baselineChars: 9 });
+    expect(getPatchSize(details)).toEqual({ patchChars: 142, unifiedDiffChars: 211 });
     expect(getPatchSelectorEfficiency(details)).toEqual({ patchChars: 7, baselineChars: 10 });
 
     const rendered = buildPatchResultRenderText({
@@ -154,23 +154,23 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("<muted>Patch efficiency: 5/9 chars vs baseline (55.6%, saved 44.4%)</muted>");
-    expect(rendered).toContain("<muted>Selector cost: 70.0%</muted>");
+    expect(rendered).toContain("<muted>Patch size: 142 vs 211 chars (32.7% smaller than unified diff)</muted>");
+    expect(rendered).not.toContain("Selector cost");
   });
 
-  it("renders selector cost metric at or below half of baseline", () => {
+  it.each([
+    [{ patchChars: 120, unifiedDiffChars: 100 }, "20.0% larger than unified diff"],
+    [{ patchChars: 100, unifiedDiffChars: 100 }, "same as unified diff"],
+  ])("renders patch size relation", (patchSize, relation) => {
     const rendered = buildPatchResultRenderText({
-      details: {
-        selectorEfficiency: { patchChars: 5, baselineChars: 10 },
-        diff: "--- a/file\n+++ b/file\n-old text\n+new"
-      },
+      details: { patchSize, diff: "--- a/file\n+++ b/file\n-old\n+new" },
       expanded: false,
       isPartial: false,
       isError: false,
       theme
     });
 
-    expect(rendered).toContain("<muted>Selector cost: 50.0%</muted>");
+    expect(rendered).toContain(`<muted>Patch size: ${patchSize.patchChars} vs ${patchSize.unifiedDiffChars} chars (${relation})</muted>`);
   });
 
   it("renders collapsed diff with compact limit, color, omission count, and Ctrl+O hint", () => {

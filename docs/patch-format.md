@@ -94,7 +94,7 @@ Rules:
 
 ### Blank line operations
 
-`:` is the exact-text selector; with no text after it, it matches an empty logical line.
+An empty hunk row is the exact unified-diff form for an empty context line; no redundant context-space character is needed. In classic profile, `:` is the explicit exact-text selector and also matches an empty logical line when no text follows it.
 
 This patch deletes one of two blank lines and inserts one blank line at the end of the matched span:
 
@@ -115,7 +115,7 @@ after
 +
 ```
 
-Use ` :` to match a blank context line, `-:` to delete a blank line, and `+` with no following text to insert a blank line.
+Use an empty row or ` :` to match a blank context line, `-:` to delete a blank line, and `+` with no following text to insert a blank line.
 
 Result has one blank line between `before` and `after`, plus one blank line after `after`:
 
@@ -153,7 +153,8 @@ Update receipts show hunk headers, surviving context line hashes, and inserted-l
 ## `details.diff`
 
 Tool result details include `details.diff`: a human patch transcript for host/UI. Update entries show resolved hunk transcript lines. This diff is not placed in model-visible output. Pi TUI human rendering reads this field and shows a colorized preview in collapsed mode, with a larger transcript view when expanded.
-Tool result details also include `details.selectorEfficiency`, a selector-only authored-character count versus canonical unified-diff baseline. Insert rows are excluded. When selector baseline characters are available, Pi TUI rendering shows `Selector cost: <ratio>%`; agent-visible patch receipts do not append this metric.
+Tool result details also include `details.patchSize`, with the complete normalized authored patch character count and equivalent exact unified-diff character count. File headers, hunk headers, optional outer boundaries, body rows, and normalized line separators are included. Equivalent unified-diff rows expand selectors, ranges, and replacements; empty context lines use physically blank rows. Pi TUI renders `Patch size: <patch> vs <unified> chars (<difference> than unified diff)`.
+`details.selectorEfficiency` remains selector-only structured metadata. Insert rows are excluded; no selector-cost footer is rendered.
 When patch execution fails, parser errors include an input line number. Pi TUI rendering shows the first error line plus a bounded preview of the actual agent input (`patch` text, or the `patch_file` path); when a line number is available, the inline `patch` preview is centered around that line. Partial apply failures lift the `Failed:` operation and retry patch path above the input preview so the real cause is visible without expanding the tool result.
 
 ## Collision risk

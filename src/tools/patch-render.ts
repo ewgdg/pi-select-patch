@@ -1,5 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { formatSelectorCost, type PatchCharEfficiency } from "../selector-efficiency.js";
+import { type PatchSizeComparison } from "../patch-size.js";
+import { type SelectorEfficiency } from "../selector-efficiency.js";
 
 export const COLLAPSED_RESULT_DIFF_MAX_LINES = 16;
 export const EXPANDED_RESULT_DIFF_MAX_LINES = 200;
@@ -102,19 +103,22 @@ export function getPatchMatcherStats(details: unknown): PatchMatcherStats {
   return stats;
 }
 
-export function getPatchCharEfficiency(details: unknown): PatchCharEfficiency | undefined {
-  return getPatchEfficiency(details, "charEfficiency");
-}
-
-export function getPatchSelectorEfficiency(details: unknown): PatchCharEfficiency | undefined {
-  return getPatchEfficiency(details, "selectorEfficiency");
-}
-
-function getPatchEfficiency(details: unknown, key: "charEfficiency" | "selectorEfficiency"): PatchCharEfficiency | undefined {
-  if (!isRecord(details) || !isRecord(details[key])) {
+export function getPatchSize(details: unknown): PatchSizeComparison | undefined {
+  if (!isRecord(details) || !isRecord(details.patchSize)) {
     return undefined;
   }
-  const { patchChars, baselineChars } = details[key];
+  const { patchChars, unifiedDiffChars } = details.patchSize;
+  if (!isNonNegativeInteger(patchChars) || !isNonNegativeInteger(unifiedDiffChars)) {
+    return undefined;
+  }
+  return { patchChars, unifiedDiffChars };
+}
+
+export function getPatchSelectorEfficiency(details: unknown): SelectorEfficiency | undefined {
+  if (!isRecord(details) || !isRecord(details.selectorEfficiency)) {
+    return undefined;
+  }
+  const { patchChars, baselineChars } = details.selectorEfficiency;
   if (!isNonNegativeInteger(patchChars) || !isNonNegativeInteger(baselineChars)) {
     return undefined;
   }
@@ -246,9 +250,8 @@ export function buildPatchResultRenderText(options: {
   ];
   const renderedDiff = formatPatchResultDiff(diff, expanded, theme);
   const matcherStatsFooter = formatPatchMatcherStatsFooter(getPatchMatcherStats(details), theme);
-  const charEfficiencyFooter = formatPatchCharEfficiencyFooter(getPatchCharEfficiency(details), theme);
-  const selectorCost = formatPatchSelectorCost(getPatchSelectorEfficiency(details), theme);
-  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, charEfficiencyFooter, selectorCost];
+  const patchSizeFooter = formatPatchSizeFooter(getPatchSize(details), theme);
+  const body = [`${theme.fg("success", summaryParts[0])} ${summaryParts.slice(1).join(theme.fg("dim", " / "))}`, renderedDiff.text, matcherStatsFooter, patchSizeFooter];
 
   return body.filter((part): part is string => Boolean(part)).join("\n");
 }
@@ -322,25 +325,15 @@ function formatPatchMatcherStatsFooter(stats: PatchMatcherStats, theme: PatchRen
   return theme.fg("muted", `Matchers: ${parts.join(" / ")}`);
 }
 
-function formatPatchCharEfficiencyFooter(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
-  if (!efficiency) {
+function formatPatchSizeFooter(size: PatchSizeComparison | undefined, theme: PatchRenderTheme): string | undefined {
+  if (!size || size.unifiedDiffChars === 0) {
     return undefined;
   }
-  const { patchChars, baselineChars } = efficiency;
-  if (baselineChars === 0) {
-    return theme.fg("muted", `Patch efficiency: ${patchChars}/${baselineChars} chars vs baseline (n/a)`);
-  }
-  const ratio = (patchChars / baselineChars) * 100;
-  const saved = 100 - ratio;
-  return theme.fg("muted", `Patch efficiency: ${patchChars}/${baselineChars} chars vs baseline (${formatPercent(ratio)}, saved ${formatPercent(saved)})`);
-}
-
-function formatPatchSelectorCost(efficiency: PatchCharEfficiency | undefined, theme: PatchRenderTheme): string | undefined {
-  if (!efficiency) {
-    return undefined;
-  }
-  const cost = formatSelectorCost(efficiency);
-  return cost ? theme.fg("muted", cost) : undefined;
+  const difference = size.patchChars - size.unifiedDiffChars;
+  const relation = difference === 0
+    ? "same as unified diff"
+    : `${formatPercent((Math.abs(difference) / size.unifiedDiffChars) * 100)} ${difference < 0 ? "smaller" : "larger"} than unified diff`;
+  return theme.fg("muted", `Patch size: ${size.patchChars} vs ${size.unifiedDiffChars} chars (${relation})`);
 }
 
 function formatPercent(value: number): string {

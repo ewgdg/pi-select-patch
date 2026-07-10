@@ -42,6 +42,8 @@ export interface PatchHunkAudit {
   matcherKinds: PatchMatcherKind[];
   patchCharCount: number;
   baselineCharCount: number;
+  patchLineCount: number;
+  baselineLineCount: number;
   selectorPatchCharCount: number;
   selectorBaselineCharCount: number;
   survivingContextHashes: string[];
@@ -163,6 +165,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   validateNoConflictingSelectors(hunk, hunkIndex);
   validateReplaceRows(hunk, hunkIndex);
   const matchPattern = buildMatchPattern(hunk);
+  const patchLineCount = authoredHunkLineCount(hunk);
 
   if (matchPattern.length === 0) {
     if (hunk.anchorHint) {
@@ -170,8 +173,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
     }
     if (lines.length === 0 && hunk.ops.every((op) => op.kind === "insert")) {
       const insertedHashes = hunk.ops.map((op) => hashFn(op.content));
-      const insertedPatchCharCount = hunk.ops.reduce((total, op) => total + authoredCharCount(op, prefixedLineCharCount(op.content)), 0);
-      const insertedBaselineCharCount = hunk.ops.reduce((total, op) => total + prefixedLineCharCount(op.content), 0);
+      const insertedPatchCharCount = hunk.ops.reduce((total, op) => total + authoredCharCount(op, unifiedDiffLineCharCount("insert", op.content)), 0);
+      const insertedBaselineCharCount = hunk.ops.reduce((total, op) => total + unifiedDiffLineCharCount("insert", op.content), 0);
       return {
         lines: hunk.ops.map((op) => ({ content: op.content, availableForHunkMatch: false })),
         receipt: {
@@ -190,6 +193,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
           matcherKinds: [],
           patchCharCount: insertedPatchCharCount,
           baselineCharCount: insertedBaselineCharCount,
+          patchLineCount,
+          baselineLineCount: hunk.ops.length,
           selectorPatchCharCount: 0,
           selectorBaselineCharCount: 0,
           survivingContextHashes: [],
@@ -221,13 +226,15 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   const transcriptLines: PatchTranscriptLine[] = [];
   let patchCharCount = 0;
   let baselineCharCount = 0;
+  let baselineLineCount = 0;
   let selectorPatchCharCount = 0;
   let selectorBaselineCharCount = 0;
 
   for (const [opIndex, op] of hunk.ops.entries()) {
     if (op.kind === "insert") {
-      patchCharCount += authoredCharCount(op, prefixedLineCharCount(op.content));
-      baselineCharCount += prefixedLineCharCount(op.content);
+      patchCharCount += authoredCharCount(op, unifiedDiffLineCharCount("insert", op.content));
+      baselineCharCount += unifiedDiffLineCharCount("insert", op.content);
+      baselineLineCount += 1;
       replacement.push({ content: op.content, availableForHunkMatch: false });
       transcriptLines.push({ kind: "insert", content: op.content });
       const insertedHash = hashFn(op.content);
@@ -245,17 +252,19 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
         throw new Error("Internal patch error: missing sparse range match.");
       }
       if (op.rangeKind === "context") {
-        const baselineRangeCharCount = rangeCharCount(lines, range.start, range.end);
+        const baselineRangeCharCount = rangeCharCount(lines, range.start, range.end, "context");
         baselineCharCount += baselineRangeCharCount;
         selectorBaselineCharCount += baselineRangeCharCount;
+        baselineLineCount += range.end - range.start;
         replacement.push(...lines.slice(range.start, range.end).map(markLineTouched));
         transcriptLines.push({ kind: "contextRange", content: renderSkippedContextRange(range.end - range.start) });
       } else {
         for (let lineIndex = range.start; lineIndex < range.end; lineIndex += 1) {
           const targetContent = lines[lineIndex].content;
-          const baselineLineCharCount = prefixedLineCharCount(targetContent);
+          const baselineLineCharCount = unifiedDiffLineCharCount("delete", targetContent);
           baselineCharCount += baselineLineCharCount;
           selectorBaselineCharCount += baselineLineCharCount;
+          baselineLineCount += 1;
           const targetHash = hashFn(targetContent);
           transcriptLines.push({ kind: "delete", content: targetContent });
           deletedHashes.push(targetHash);
@@ -274,7 +283,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
     }
     const targetContent = lines[targetIndex].content;
     const authoredSelectorCharCount = authoredCharCount(op, renderMatchSelector(op).length);
-    const baselineSelectorCharCount = prefixedLineCharCount(targetContent);
+    const baselineSelectorCharCount = unifiedDiffLineCharCount(op.kind, targetContent);
     patchCharCount += authoredSelectorCharCount;
     baselineCharCount += baselineSelectorCharCount;
     selectorPatchCharCount += authoredSelectorCharCount;
@@ -286,7 +295,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
         const replacedContent = applyLineReplaceOps(targetContent, replaceOps, hunkIndex, hunk);
         const replacementPatchCharCount = replaceOps.reduce((total, replaceOp) => total + authoredCharCount(replaceOp, replaceOpAuthoredCharFallback(replaceOp)), 0);
         patchCharCount += replacementPatchCharCount;
-        baselineCharCount += prefixedLineCharCount(replacedContent);
+        baselineCharCount += unifiedDiffLineCharCount("insert", replacedContent);
+        baselineLineCount += 2;
         replacement.push({ content: replacedContent, availableForHunkMatch: false });
         transcriptLines.push({ kind: "delete", content: targetContent });
         transcriptLines.push({ kind: "insert", content: replacedContent });
@@ -296,11 +306,13 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
         receiptLines.push({ kind: "insert", hash: insertedHash });
         continue;
       }
+      baselineLineCount += 1;
       replacement.push(markLineTouched(lines[targetIndex]));
       transcriptLines.push({ kind: "context", content: targetContent });
       survivingContextHashes.push(targetHash);
       receiptLines.push({ kind: "context", hash: targetHash });
     } else {
+      baselineLineCount += 1;
       transcriptLines.push({ kind: "delete", content: targetContent });
       deletedHashes.push(targetHash);
     }
@@ -317,6 +329,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       matcherKinds: buildMatcherKinds(currentEntries, hunk, match, resolvedMatch.smartMatcherKinds),
       patchCharCount,
       baselineCharCount,
+      patchLineCount,
+      baselineLineCount,
       selectorPatchCharCount,
       selectorBaselineCharCount,
       survivingContextHashes,
@@ -649,6 +663,10 @@ function replaceOpAuthoredCharFallback(op: ReplacePatchOp): number {
   return op.oldText.length + op.newText.length + 2;
 }
 
+function authoredHunkLineCount(hunk: Hunk): number {
+  return hunk.ops.reduce((total, op) => total + (op.kind === "replace" ? 2 : 1), 0);
+}
+
 function renderMatchSelector(op: MatchPatchOp): string {
   if (!hasMatchSelector(op)) return "<missing selector>";
   if (op.hash !== undefined && (op.content !== undefined || op.combinedSelector !== undefined)) return "<invalid hash+text selector>";
@@ -663,7 +681,8 @@ function renderMatchSelector(op: MatchPatchOp): string {
   return `${prefix}${op.content ?? ""}`;
 }
 
-function prefixedLineCharCount(content: string): number {
+function unifiedDiffLineCharCount(kind: "context" | "delete" | "insert", content: string): number {
+  if (kind === "context" && content.length === 0) return 0;
   return content.length + 1;
 }
 
@@ -671,10 +690,10 @@ function authoredCharCount(op: Hunk["ops"][number], fallback: number): number {
   return op.authoredCharCount ?? fallback;
 }
 
-function rangeCharCount(lines: readonly PatchLineState[], start: number, end: number): number {
+function rangeCharCount(lines: readonly PatchLineState[], start: number, end: number, kind: "context" | "delete"): number {
   let total = 0;
   for (let index = start; index < end; index += 1) {
-    total += prefixedLineCharCount(lines[index].content);
+    total += unifiedDiffLineCharCount(kind, lines[index].content);
   }
   return total;
 }

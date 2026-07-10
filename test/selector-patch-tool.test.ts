@@ -62,14 +62,14 @@ const resultText = (result: Awaited<ReturnType<typeof smartPatchTool.execute>>) 
 };
 const detailsDiff = (result: Awaited<ReturnType<typeof smartPatchTool.execute>>) =>
   (result.details as { diff: string }).diff;
-const detailsCharEfficiency = (
+const detailsPatchSize = (
   result: Awaited<ReturnType<typeof smartPatchTool.execute>>,
 ) =>
   (
     result.details as {
-      charEfficiency: { patchChars: number; baselineChars: number };
+      patchSize: { patchChars: number; unifiedDiffChars: number };
     }
-  ).charEfficiency;
+  ).patchSize;
 const detailsSelectorEfficiency = (
   result: Awaited<ReturnType<typeof smartPatchTool.execute>>,
 ) =>
@@ -260,6 +260,10 @@ describe("patch visible status", () => {
     );
     expect(detailsDiff(result)).toContain("-const timeoutMs = 5000;");
     expect(detailsDiff(result)).toContain("+const timeoutMs = 3000;");
+    expect(detailsPatchSize(result)).toEqual({
+      patchChars: 81,
+      unifiedDiffChars: 108,
+    });
     await expect(readFile(file, "utf8")).resolves.toBe("const timeoutMs = 3000;\n");
   });
 
@@ -580,7 +584,7 @@ describe("patch visible status", () => {
     expect(detailsDiff(result)).toContain("-old");
     expect(detailsDiff(result)).toContain("+new");
   });
-  it("reports patch chars against unified-diff baseline chars", async () => {
+  it("reports full normalized patch size against unified-diff size", async () => {
     const universal = [
       "*** Begin Patch",
       "*** Update File: file.txt",
@@ -592,16 +596,16 @@ describe("patch visible status", () => {
 
     const { result } = await patchFile("old text", universal);
 
-    expect(detailsCharEfficiency(result)).toEqual({
-      patchChars: 9,
-      baselineChars: 13,
+    expect(detailsPatchSize(result)).toEqual({
+      patchChars: 69,
+      unifiedDiffChars: 73,
     });
     expect(detailsSelectorEfficiency(result)).toEqual({
       patchChars: 5,
       baselineChars: 9,
     });
   });
-  it("counts authored combined selector whitespace and blank unified-diff rows", async () => {
+  it("counts full framing and treats a physically blank context row as canonical unified diff", async () => {
     const combinedPatch = [
       "*** Begin Patch",
       "*** Update File: file.txt",
@@ -629,16 +633,16 @@ describe("patch visible status", () => {
       blankContextPatch,
     );
 
-    expect(detailsCharEfficiency(combinedResult)).toEqual({
-      patchChars: 23,
-      baselineChars: 13,
+    expect(detailsPatchSize(combinedResult)).toEqual({
+      patchChars: 83,
+      unifiedDiffChars: 73,
     });
-    expect(detailsCharEfficiency(blankContextResult)).toEqual({
-      patchChars: 8,
-      baselineChars: 9,
+    expect(detailsPatchSize(blankContextResult)).toEqual({
+      patchChars: 69,
+      unifiedDiffChars: 69,
     });
   });
-  it("reports char efficiency for add, range, and dry-run changes", async () => {
+  it("reports full patch size for add, range, and dry-run changes", async () => {
     const addDir = await makeTempDir();
     const addPatch = [
       "*** Begin Patch",
@@ -674,13 +678,13 @@ describe("patch visible status", () => {
       { cwd: rangeDir } as never,
     );
 
-    expect(detailsCharEfficiency(addResult)).toEqual({
-      patchChars: 12,
-      baselineChars: 12,
+    expect(detailsPatchSize(addResult)).toEqual({
+      patchChars: 67,
+      unifiedDiffChars: 67,
     });
-    expect(detailsCharEfficiency(rangeResult)).toEqual({
-      patchChars: 8,
-      baselineChars: 8,
+    expect(detailsPatchSize(rangeResult)).toEqual({
+      patchChars: 70,
+      unifiedDiffChars: 71,
     });
     expect(detailsSelectorEfficiency(addResult)).toEqual({
       patchChars: 0,

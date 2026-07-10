@@ -36,7 +36,8 @@ import {
   writeNewTextFileAtomically,
   writeTextFileAtomically,
 } from "../fs-text.js";
-import { type PatchCharEfficiency } from "../selector-efficiency.js";
+import { type SelectorEfficiency } from "../selector-efficiency.js";
+import { type PatchSizeComparison } from "../patch-size.js";
 import {
   countRenderedLines,
   getVisibleOutputOverflow,
@@ -375,6 +376,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
     if (dryRun) {
       return buildPatchToolResult(
         await planFileChangesForDryRun(ctx.cwd, universalPatch.operations),
+        universalPatch,
         true,
         executionOptions.receipt,
       );
@@ -415,6 +417,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
 
     return buildPatchToolResult(
       plannedChanges,
+      universalPatch,
       false,
       executionOptions.receipt,
     );
@@ -844,6 +847,7 @@ function formatCause(cause: unknown): string {
 
 function buildPatchToolResult(
   plannedChanges: readonly PlannedFileChange[],
+  universalPatch: UniversalPatch,
   dryRun: boolean,
   receipt: PatchReceiptMode,
 ) {
@@ -869,7 +873,7 @@ function buildPatchToolResult(
         overflow: status.overflow,
         visibleLineCount: status.visibleLineCount,
       },
-      charEfficiency: getPatchCharEfficiency(plannedChanges),
+      patchSize: getPatchSize(universalPatch, plannedChanges),
       selectorEfficiency,
     },
   };
@@ -938,22 +942,75 @@ function serializeAddFileText(operation: AddFileOperation): string {
   });
 }
 
-function getPatchCharEfficiency(
+interface PatchBodyComparison {
+  patchChars: number;
+  patchLines: number;
+  unifiedDiffChars: number;
+  unifiedDiffLines: number;
+}
+
+function getPatchSize(
+  universalPatch: UniversalPatch,
   plannedChanges: readonly PlannedFileChange[],
-): PatchCharEfficiency {
-  return sumPatchEfficiencies(plannedChanges, getFileChangeCharEfficiency);
+): PatchSizeComparison {
+  if (!universalPatch.source) {
+    throw new Error("Internal patch error: normalized source input is missing.");
+  }
+
+  const patchChars = universalPatch.source.lines.join("\n").length;
+  const body = plannedChanges.reduce(
+    (total, change) => addPatchBodyComparisons(total, getFileChangeBodyComparison(change)),
+    { patchChars: 0, patchLines: 0, unifiedDiffChars: 0, unifiedDiffLines: 0 },
+  );
+  // Expanded ranges/replacements change row count, so their line separators must change too.
+  const unifiedDiffChars = patchChars
+    - body.patchChars
+    + body.unifiedDiffChars
+    + body.unifiedDiffLines
+    - body.patchLines;
+
+  return { patchChars, unifiedDiffChars };
+}
+
+function addPatchBodyComparisons(left: PatchBodyComparison, right: PatchBodyComparison): PatchBodyComparison {
+  return {
+    patchChars: left.patchChars + right.patchChars,
+    patchLines: left.patchLines + right.patchLines,
+    unifiedDiffChars: left.unifiedDiffChars + right.unifiedDiffChars,
+    unifiedDiffLines: left.unifiedDiffLines + right.unifiedDiffLines,
+  };
+}
+
+function getFileChangeBodyComparison(change: PlannedFileChange): PatchBodyComparison {
+  if (change.operation === "add") {
+    const lines = parseText(change.newText ?? "").lines;
+    const chars = prefixedTextLinesCharCount(lines);
+    return { patchChars: chars, patchLines: lines.length, unifiedDiffChars: chars, unifiedDiffLines: lines.length };
+  }
+  if (!change.applyResult) {
+    throw new Error("Internal patch error: update size requires apply result.");
+  }
+  return change.applyResult.hunkAudits.reduce(
+    (total, audit) => addPatchBodyComparisons(total, {
+      patchChars: audit.patchCharCount,
+      patchLines: audit.patchLineCount,
+      unifiedDiffChars: audit.baselineCharCount,
+      unifiedDiffLines: audit.baselineLineCount,
+    }),
+    { patchChars: 0, patchLines: 0, unifiedDiffChars: 0, unifiedDiffLines: 0 },
+  );
 }
 
 function getPatchSelectorEfficiency(
   plannedChanges: readonly PlannedFileChange[],
-): PatchCharEfficiency {
-  return sumPatchEfficiencies(plannedChanges, getFileChangeSelectorEfficiency);
+): SelectorEfficiency {
+  return sumSelectorEfficiencies(plannedChanges, getFileChangeSelectorEfficiency);
 }
 
-function sumPatchEfficiencies(
+function sumSelectorEfficiencies(
   plannedChanges: readonly PlannedFileChange[],
-  getChangeEfficiency: (change: PlannedFileChange) => PatchCharEfficiency,
-): PatchCharEfficiency {
+  getChangeEfficiency: (change: PlannedFileChange) => SelectorEfficiency,
+): SelectorEfficiency {
   return plannedChanges.reduce(
     (total, change) => {
       const changeEfficiency = getChangeEfficiency(change);
@@ -966,26 +1023,9 @@ function sumPatchEfficiencies(
   );
 }
 
-function getFileChangeCharEfficiency(
-  change: PlannedFileChange,
-): PatchCharEfficiency {
-  if (change.operation === "add") {
-    const chars = prefixedTextLinesCharCount(change.newText ?? "");
-    return { patchChars: chars, baselineChars: chars };
-  }
-  const hunkAudits = change.applyResult?.hunkAudits ?? [];
-  return hunkAudits.reduce(
-    (total, hunkAudit) => ({
-      patchChars: total.patchChars + hunkAudit.patchCharCount,
-      baselineChars: total.baselineChars + hunkAudit.baselineCharCount,
-    }),
-    { patchChars: 0, baselineChars: 0 },
-  );
-}
-
 function getFileChangeSelectorEfficiency(
   change: PlannedFileChange,
-): PatchCharEfficiency {
+): SelectorEfficiency {
   if (change.operation !== "update") {
     return { patchChars: 0, baselineChars: 0 };
   }
@@ -1000,8 +1040,8 @@ function getFileChangeSelectorEfficiency(
   );
 }
 
-function prefixedTextLinesCharCount(text: string): number {
-  return parseText(text).lines.reduce(
+function prefixedTextLinesCharCount(lines: readonly string[]): number {
+  return lines.reduce(
     (total, line) => total + line.length + 1,
     0,
   );

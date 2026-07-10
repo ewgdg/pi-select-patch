@@ -182,6 +182,9 @@ describe("applyPatchToText", () => {
     expect(result.text).toBe("a\n\nnew\nz");
     expect(result.hunkAudits[0].matcherKinds).toEqual(["unifiedDiff", "unifiedDiff", "unifiedDiff", "unifiedDiff"]);
     expect(result.hunkAudits[0].matchPattern).toEqual([" :a", " :", "-:old", " :z"]);
+    expect(result.hunkAudits[0].baselineCharCount).toBe(12);
+    expect(result.hunkAudits[0].patchLineCount).toBe(5);
+    expect(result.hunkAudits[0].baselineLineCount).toBe(5);
   });
 
   it("does not retry with unified exact matching when selector matching finds no span", () => {
