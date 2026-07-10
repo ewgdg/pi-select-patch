@@ -505,6 +505,16 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matcherKinds).toEqual(["charSubsequence"]);
   });
 
+  it("uses character subsequence for a compact selector without spaces", () => {
+    const result = applyPatchToText(
+      "long_object_name.long_function_call(long_arg_name)",
+      patch("-~longobj.longcall(arg)"),
+    );
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["charSubsequence"]);
+  });
+
   it("prefers fuzzy over final char subsequence matching", () => {
     const result = applyPatchToText("return profilePolicy;", patch("-~return profilePolic;"));
 

@@ -159,8 +159,14 @@ describe("patch visible status", () => {
     expect(description).toContain("Line anchors are hard search boundaries, not proximity hints.");
     expect(description).toContain("They do not select the closest match.");
     expect(description).toContain("### Hunk Match: Smart Profile");
-    expect(description).toContain("<file_content>\nThis is a very long long long stable anchor\n</file_content>");
-    expect(description).toContain("@@\n a long anchor\n+new line\n</patch>");
+    expect(description).not.toContain('<example description="smart insertion">');
+    expect(description).toContain('<bad_patch>\n-const operationTarget = await prepareOperationTarget(cwd, operation);\n+replacement\n</bad_patch>');
+    expect(description).toContain('<patch>\n*** Update File: path/to/file.txt\n@@\n-operationTarget await\n+replacement\n</patch>');
+    expect(description).toContain("sampled source-order tokens skip words between them");
+    expect(description).toContain('<example description="character subsequence without spaces">');
+    expect(description).toContain("long_object_name.long_function_call(long_arg_name)");
+    expect(description).toContain("-longobj.longcall(arg)");
+    expect(description).toContain("falls through to character subsequence");
     expect(description).not.toContain("<policy>");
     expect(description).not.toContain("markerless_selector");
   });
@@ -168,10 +174,14 @@ describe("patch visible status", () => {
   it("keeps patch behavior policy in one prompt guideline chunk", () => {
     expect(smartPatchTool.promptGuidelines).toHaveLength(1);
     const guideline = smartPatchTool.promptGuidelines?.[0] ?? "";
+    expect(smartPatchTool.promptSnippet).toBe("Use this tool for line-based patching. Use shorter selectors.");
+    expect(smartPatchTool.promptSnippet).not.toContain("first attempt");
 
     expect(guideline).toContain("<patch_tool_policy>");
-    expect(guideline).toContain("larger hunk with several neighboring short selectors");
-    expect(guideline).toContain("when this reduces total patch text");
+    expect(guideline).toContain("smallest set of short selectors");
+    expect(guideline).toContain("add one neighboring short selector before lengthening");
+    expect(guideline).toContain("Only lengthen a selector after a stale or ambiguous failure");
+    expect(guideline).not.toContain("larger hunk with several neighboring short selectors");
     expect(guideline).not.toContain("Prefer short selectors plus accurate line anchors");
     expect(guideline).not.toContain("or an anchor hint");
     expect(guideline).toContain("safety margin");

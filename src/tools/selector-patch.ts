@@ -153,7 +153,7 @@ function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
 
 function buildPatchProfilePolicy(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
-    return "Always prefer short prefix or sampled-word subsequence selectors over full-line exact selectors. Include enough neighboring smart context when text may repeat. Sample n words from a line to form a subsequence match, where n <= 0.5 * total word count. Use full-line exact selectors only when the target line is already short or needed to disambiguate.";
+    return "For first attempt, use 2-4 distinctive source-order tokens from each long target line. Never copy a long target line verbatim. A short prefix is fine when unique. If text may repeat, add one neighboring short selector before lengthening an existing selector. Only lengthen a selector after a stale or ambiguous failure. Use a full-line exact selector only when the target line is already short.";
   }
   if (profile === "hash") {
     return "Prefer the shortest unique hash width available from `read`. Use ` ...`/`-...` ranges to avoid listing many unchanged/deleted hashes.";
@@ -164,20 +164,6 @@ function buildPatchProfilePolicy(profile: SelectorPatchProfile): string {
 function buildPatchParameterExamples(profile: SelectorPatchProfile): string {
   if (profile === "smart") {
     return dedentBlock(`
-      <example description="smart insertion">
-      <file_content>
-      This is a very long long long stable anchor
-      </file_content>
-      <patch>
-      *** Update File: path/to/file.txt
-      @@
-       a long anchor
-      +new line
-      </patch>
-      <explanation>
-      "a long anchor" is a sampled selector: it uses selected words from the longer anchor line, then matches by token subsequence.
-      </explanation>
-      </example>
       <example description="smart range deletion">
       <patch>
       *** Update File: path/to/file.txt
@@ -192,18 +178,36 @@ function buildPatchParameterExamples(profile: SelectorPatchProfile): string {
       Smart context selectors anchor the range. \`-...\` deletes all matched lines between them.
       </explanation>
       </example>
-      <example description="code block handling">
-      <code_block>
-      long_object_name.long_function_call(long_arg_name)
-      </code_block>
+      <example description="short smart selector">
+      <file_content>
+      const operationTarget = await prepareOperationTarget(cwd, operation);
+      </file_content>
+      <bad_patch>
+      -const operationTarget = await prepareOperationTarget(cwd, operation);
+      +replacement
+      </bad_patch>
       <patch>
       *** Update File: path/to/file.txt
       @@
-      -long_obj.long_call(arg)
-      +another_call(arg)
+      -operationTarget await
+      +replacement
       </patch>
       <explanation>
-      Uses char subsequence to match long code line.
+      Two sampled source-order tokens skip words between them while preserving source order.
+      </explanation>
+      </example>
+      <example description="character subsequence without spaces">
+      <file_content>
+      long_object_name.long_function_call(long_arg_name)
+      </file_content>
+      <patch>
+      *** Update File: path/to/file.txt
+      @@
+      -longobj.longcall(arg)
+      +replacement
+      </patch>
+      <explanation>
+      When a long line has no whitespace-delimited words, sample characters instead. Smart matching falls through to character subsequence; sampled characters must stay in source order.
       </explanation>
       </example>
     `);
@@ -490,9 +494,8 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
   return [
     dedentBlock(`
       <patch_tool_policy>
-      Prefer a larger hunk with several neighboring short selectors over a smaller hunk with fewer long exact selectors when this reduces total patch text.
-      Short selectors do not imply high error rate when surrounding context disambiguates the hunk.
-      Long selectors usually cost more than their small error-rate drop is worth.
+      Start with the smallest set of short selectors that can uniquely identify the hunk.
+      Minimize selector text and unnecessary selector rows; surrounding short context provides safety without copied full lines.
       ${buildPatchProfilePromptGuideline(profile)}
       ${profile === "classic" ? "Classic profile supports explicit selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}
