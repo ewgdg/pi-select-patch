@@ -214,7 +214,14 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   const searchEnd = getAnchorSearchEnd(hunk);
   const resolvedMatch = findResolvedHunkMatch(currentEntries, hunk, matchOps, searchStart, searchEnd);
   if (!resolvedMatch) {
-    throw new StaleHunkError(`Hunk not found${renderAnchorSearchScope(hunk)}.`, hunkErrorLocation(hunk));
+    const staleDetail = `Hunk not found${renderAnchorSearchScope(hunk)}.`;
+    const diagnosticMatch = hunk.anchorHint
+      ? findOutsideAnchorDiagnosticMatch(currentEntries, hunk, matchOps)
+      : undefined;
+    if (diagnosticMatch) {
+      throw new StaleHunkError(`${staleDetail} ${renderOutsideAnchorDiagnostic(diagnosticMatch.match)}`, hunkErrorLocation(hunk));
+    }
+    throw new StaleHunkError(staleDetail, hunkErrorLocation(hunk));
   }
 
   const { match } = resolvedMatch;
@@ -576,6 +583,32 @@ function renderAnchorSearchScope(hunk: Hunk): string {
   return hunk.anchorHint.endLine === undefined
     ? ` at or after line ${hunk.anchorHint.line}`
     : ` within lines ${hunk.anchorHint.line}...${hunk.anchorHint.endLine}`;
+}
+
+function findOutsideAnchorDiagnosticMatch(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[]
+): ResolvedHunkMatch | undefined {
+  let diagnosticMatch: ResolvedHunkMatch | undefined;
+  try {
+    diagnosticMatch = findResolvedHunkMatch(entries, hunk, matchOps, 0, undefined);
+  } catch (error) {
+    if (error instanceof AmbiguousHunkError) return undefined;
+    throw error;
+  }
+  if (!diagnosticMatch || !hunk.anchorHint) return undefined;
+  const match = diagnosticMatch.match;
+  const startsBeforeAnchor = match.start < hunk.anchorHint.line - 1;
+  const endsAfterAnchor = hunk.anchorHint.endLine !== undefined && match.end > hunk.anchorHint.endLine;
+  return startsBeforeAnchor || endsAfterAnchor ? diagnosticMatch : undefined;
+}
+
+function renderOutsideAnchorDiagnostic(match: SparseMatch): string {
+  const firstLine = match.start + 1;
+  return match.end - match.start === 1
+    ? `Unique match exists outside line anchor at line ${firstLine}.`
+    : `Unique match exists outside line anchor at lines ${firstLine}...${match.end}.`;
 }
 
 function buildMatchPattern(hunk: Hunk): string[] {

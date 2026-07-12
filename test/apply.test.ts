@@ -198,6 +198,24 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits[0].matchStart).toBe(2);
   });
 
+  it("diagnoses a unique match outside a lower-bound line anchor without applying it", () => {
+    expect(() => applyPatchToText("target\nx", anchoredPatch(2, "-:target"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 2. Unique match exists outside line anchor at line 1."
+    );
+  });
+
+  it("diagnoses a unique multi-line match outside a ranged line anchor", () => {
+    expect(() => applyPatchToText("before\nother\ntarget\nnext", anchoredRangePatch(1, 2, " :target", " :next"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found within lines 1...2. Unique match exists outside line anchor at lines 3...4."
+    );
+  });
+
+  it("keeps stale detail when the whole-file diagnostic is ambiguous", () => {
+    expect(() => applyPatchToText("target\nx\ntarget", anchoredPatch(4, "-:target"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 4."
+    );
+  });
+
   it("does not search before hunk anchor hints", () => {
     expect(() => applyPatchToText("target\nx", anchoredPatch(2, "-:target"))).toThrow(/at or after line 2/);
   });
