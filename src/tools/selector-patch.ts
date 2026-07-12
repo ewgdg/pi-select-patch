@@ -500,7 +500,7 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
       ${profile === "explicit" ? "Explicit profile supports selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}
       Use range selector whenever possible for spans over 3 lines.
-      Use line anchors to disambiguate only when based on the latest accurate line offset. For \`@@ @<start>\`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For \`@@ @<start>...<end>\`, expand both bounds with a safety margin for expected line drift.
+      Avoid using line anchors when uncertain on line offset. For \`@@ @<start>\`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For \`@@ @<start>...<end>\`, expand both bounds with a safety margin for expected line drift.
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
       </patch_tool_policy>
     `),
