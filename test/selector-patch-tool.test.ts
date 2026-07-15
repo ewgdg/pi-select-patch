@@ -34,14 +34,20 @@ afterEach(() => {
 async function makeTempDir() {
   const dir = await makePlainTempDir();
   const agentDir = join(dir, "agent");
-  const configDir = join(agentDir, "extensions", "pi-select-patch");
-  await mkdir(configDir, { recursive: true });
-  await writeFile(
-    join(configDir, "config.json"),
-    JSON.stringify({ profile: "hash" }),
-  );
+  await writeProfileSettings(agentDir, "hash");
   process.env.PI_CODING_AGENT_DIR = agentDir;
   return dir;
+}
+
+async function writeProfileSettings(
+  agentDir: string,
+  profile: "explicit" | "smart" | "hash",
+): Promise<void> {
+  await mkdir(agentDir, { recursive: true });
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({ "pi-select-patch": { profile } }),
+  );
 }
 
 function restoreEnv(name: string, value: string | undefined): void {
@@ -380,12 +386,7 @@ describe("patch visible status", () => {
   it("uses the tool's bound smart profile even if config changes before execute", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-select-patch");
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, "config.json"),
-      JSON.stringify({ profile: "hash" }),
-    );
+    await writeProfileSettings(agentDir, "hash");
     process.env.PI_CODING_AGENT_DIR = agentDir;
     const file = join(dir, "file.txt");
     await writeFile(file, "anchor line\nold value");
@@ -421,12 +422,7 @@ describe("patch visible status", () => {
   it("does not allow per-call row-parsing override in hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-select-patch");
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, "config.json"),
-      JSON.stringify({ profile: "hash" }),
-    );
+    await writeProfileSettings(agentDir, "hash");
     process.env.PI_CODING_AGENT_DIR = agentDir;
     const file = join(dir, "file.txt");
     await writeFile(file, "anchor line\nold value");
@@ -457,12 +453,7 @@ describe("patch visible status", () => {
   it("uses hash selectors and hash receipt with the bound hash profile", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-select-patch");
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, "config.json"),
-      JSON.stringify({ profile: "hash" }),
-    );
+    await writeProfileSettings(agentDir, "hash");
     process.env.PI_CODING_AGENT_DIR = agentDir;
     const file = join(dir, "file.txt");
     await writeFile(file, "old");
@@ -497,12 +488,7 @@ describe("patch visible status", () => {
   it("keeps smart unified-diff rows in retry patches for configured smart defaults", async () => {
     const dir = await makePlainTempDir();
     const agentDir = join(dir, "agent");
-    const configDir = join(agentDir, "extensions", "pi-select-patch");
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, "config.json"),
-      JSON.stringify({ profile: "smart" }),
-    );
+    await writeProfileSettings(agentDir, "smart");
     process.env.PI_CODING_AGENT_DIR = agentDir;
     await writeFile(join(dir, "a.txt"), "old");
     await writeFile(join(dir, "b.txt"), "present");

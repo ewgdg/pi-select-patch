@@ -139,4 +139,6 @@ Dry runs validate and return normal receipt shape without writing.
 
 Extension registers `patch`, keeps built-in `write`, and hides built-in `edit` plus old selector tool names. Smart profile also keeps built-in `read`.
 
+Set alternative profiles under `pi-select-patch.profile` in the global `~/.pi/agent/settings.json`. `PI_SELECT_PATCH_PROFILE` takes precedence.
+
 Alternative profiles and full format details live in [docs/patch-format.md](docs/patch-format.md). Smart profile remains recommended default.

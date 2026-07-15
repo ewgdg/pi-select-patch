@@ -11,23 +11,20 @@ export type SelectorPatchProfile = "explicit" | "smart" | "hash";
 export const DEFAULT_PROFILE: SelectorPatchProfile = "smart";
 
 const ENV_PROFILE = "PI_SELECT_PATCH_PROFILE";
-const EXTENSION_CONFIG_PATH = [
-  "extensions",
-  "pi-select-patch",
-  "config.json",
-] as const;
+const SETTINGS_FILE = "settings.json";
+const SETTINGS_KEY = "pi-select-patch";
 
 export async function readSelectorPatchConfig(): Promise<SelectorPatchConfig> {
-  const globalConfig = await readConfigJson(globalConfigPath());
-  const configuredProfile = readEnvProfile() ?? readProfile(globalConfig);
+  const globalSettings = await readConfigJson(globalSettingsPath());
+  const configuredProfile = readEnvProfile() ?? readProfile(globalSettings);
   const profile = configuredProfile ?? DEFAULT_PROFILE;
   return { profile };
 }
 
-function globalConfigPath(): string {
+function globalSettingsPath(): string {
   return join(
     process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"),
-    ...EXTENSION_CONFIG_PATH,
+    SETTINGS_FILE,
   );
 }
 
@@ -39,9 +36,11 @@ async function readConfigJson(path: string): Promise<unknown> {
   }
 }
 
-function readProfile(config: unknown): SelectorPatchProfile | undefined {
-  if (!isObject(config)) return undefined;
-  return parseProfile(config.profile);
+function readProfile(settings: unknown): SelectorPatchProfile | undefined {
+  if (!isObject(settings)) return undefined;
+  const selectorPatch = settings[SETTINGS_KEY];
+  if (!isObject(selectorPatch)) return undefined;
+  return parseProfile(selectorPatch.profile);
 }
 
 function readEnvProfile(): SelectorPatchProfile | undefined {

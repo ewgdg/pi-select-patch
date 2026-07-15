@@ -10,7 +10,17 @@ HASH│content
 
 Every line includes a visible hash. Width is entropy-based: entropy `< 4` shows 1 char, `< 10` shows 2 chars, `< 24` shows 3 chars, otherwise 4. `HASH` is the first 1 to 4 characters of the SHA-256 based full line hash. Line terminators are excluded. Duplicate content produces same full hash and same visible prefix.
 
-Profiles control session defaults and read registration. Set `profile: "explicit" | "smart" | "hash"` in `~/.pi/agent/extensions/pi-select-patch/config.json`, or use `PI_SELECT_PATCH_PROFILE`. Default is `smart`: built-in `read` stays active with smart/status patch defaults. `explicit` keeps built-in `read` and exact/status patch defaults; `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
+Profiles control session defaults and read registration. Configure the profile in the global `~/.pi/agent/settings.json`:
+
+```json
+{
+  "pi-select-patch": {
+    "profile": "smart"
+  }
+}
+```
+
+`profile` accepts `"explicit"`, `"smart"`, or `"hash"`. `PI_SELECT_PATCH_PROFILE` overrides the setting. Project-local `.pi/settings.json` does not change the profile. Default is `smart`: built-in `read` stays active with smart/status patch defaults. `explicit` keeps built-in `read` and exact/status patch defaults; `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
 
 Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline convention (`LF`, `CRLF`, or `CR`) and final-newline state are preserved on update write. Empty file has zero logical lines.
 
