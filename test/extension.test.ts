@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -67,6 +67,45 @@ describe("extension registration", () => {
     } finally {
       restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
+    }
+  });
+
+  it("binds configured tolerant anchor mode into the session patch tool", async () => {
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const previousAnchorMode = process.env.PI_SELECT_PATCH_ANCHOR_MODE;
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    delete process.env.PI_SELECT_PATCH_ANCHOR_MODE;
+    await writeFile(
+      join(agentDir, "settings.json"),
+      JSON.stringify({ "pi-select-patch": { anchorMode: "tolerant" } }),
+    );
+    try {
+      const registeredTools: RegisteredTool[] = [];
+      let sessionStart:
+        ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
+
+      piSelectPatch({
+        registerTool(tool: RegisteredTool) {
+          registeredTools.push(tool);
+        },
+        on(event: string, handler: (event: unknown, ctx: unknown) => Promise<void> | void) {
+          if (event === "session_start") sessionStart = handler;
+        },
+        getActiveTools() {
+          return ["read", "edit", "write"];
+        },
+        setActiveTools() {},
+      } as never);
+
+      await sessionStart?.({}, { cwd: process.cwd(), isProjectTrusted: () => false });
+
+      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain(
+        "tolerant hierarchical resolution",
+      );
+    } finally {
+      restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
+      restoreEnv("PI_SELECT_PATCH_ANCHOR_MODE", previousAnchorMode);
     }
   });
 

@@ -4,8 +4,11 @@ import { normalizeCombinedTextSelector, parsePatch, type Hunk, type MatchPatchOp
 import { renderHashLines, toHashLines, type HashLineEntry } from "./read-format.js";
 import { parseText, serializeText } from "./text-lines.js";
 
+export type AnchorMode = "strict" | "tolerant";
+
 export interface ApplyPatchOptions {
   hashFn?: HashFunction;
+  anchorMode?: AnchorMode;
 }
 
 export type PatchReceiptLineKind = "context" | "insert";
@@ -35,6 +38,14 @@ export interface PatchHunkTranscript {
 
 export type PatchMatcherKind = "exact" | "prefix" | "contains" | "suffix" | "subsequence" | "fuzzy" | "charSubsequence" | "hash" | "combined" | "range" | "unifiedDiff";
 
+export type AnchorAffinity = "contained" | "overlapping" | "outside";
+
+export interface ToleratedAnchorResolution {
+  affinity: Exclude<AnchorAffinity, "contained">;
+  authoredAnchor: { startLine: number; endLine?: number };
+  resolvedMatch: { startLine: number; endLine: number };
+}
+
 export interface PatchHunkAudit {
   hunkIndex: number;
   matchStart: number | null;
@@ -49,6 +60,7 @@ export interface PatchHunkAudit {
   survivingContextHashes: string[];
   insertedHashes: string[];
   deletedHashes: string[];
+  anchorResolution?: ToleratedAnchorResolution;
 }
 
 export interface ApplyPatchResult {
@@ -91,6 +103,14 @@ interface ResolvedHunkMatch {
   match: SparseMatch;
   smartMatcherKinds: Map<number, PatchMatcherKind>;
   smartMatcherEditCosts: Map<number, number>;
+  anchorResolution?: ToleratedAnchorResolution;
+}
+
+interface HunkMatchSearch {
+  start: number;
+  end?: number;
+  matchFilter?: (match: SparseMatch) => boolean;
+  errorScope?: string;
 }
 
 interface SmartHunkCandidate extends ResolvedHunkMatch {}
@@ -117,6 +137,7 @@ export function applyPatchToText(
   options: ApplyPatchOptions = {}
 ): ApplyPatchResult {
   const hashFn = options.hashFn ?? hashLine;
+  const anchorMode = options.anchorMode ?? "strict";
   const patch = typeof patchInput === "string" ? parsePatch(patchInput, hashFn) : patchInput;
   const model = parseText(text);
   let currentLines = model.lines.map((content) => ({ content, availableForHunkMatch: true }));
@@ -125,7 +146,7 @@ export function applyPatchToText(
   const hunkTranscripts: PatchHunkTranscript[] = [];
 
   for (const [hunkOffset, hunk] of patch.hunks.entries()) {
-    const applied = applyHunk(currentLines, hunk, hunkOffset + 1, hashFn);
+    const applied = applyHunk(currentLines, hunk, hunkOffset + 1, hashFn, anchorMode);
     currentLines = applied.lines;
     hunkReceipts.push(applied.receipt);
     hunkAudits.push(applied.audit);
@@ -160,7 +181,7 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
   return `${line.kind === "insert" ? "+" : " "}${line.hash}`;
 }
 
-function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction): AppliedHunk {
+function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction, anchorMode: AnchorMode): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
   validateNoConflictingSelectors(hunk, hunkIndex);
   validateReplaceRows(hunk, hunkIndex);
@@ -210,10 +231,16 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
 
   const currentEntries = lines.map((line) => ({ content: line.content, hash: hashFn(line.content), availableForHunkMatch: line.availableForHunkMatch }));
   const matchOps = hunk.ops.filter(isMatchOp);
-  const searchStart = getAnchorSearchStart(hunk);
-  const searchEnd = getAnchorSearchEnd(hunk);
-  const resolvedMatch = findResolvedHunkMatch(currentEntries, hunk, matchOps, searchStart, searchEnd);
+  const resolvedMatch = anchorMode === "tolerant" && hunk.anchorHint
+    ? findTolerantAnchorMatch(currentEntries, hunk, matchOps)
+    : findResolvedHunkMatch(currentEntries, hunk, matchOps, {
+      start: getAnchorSearchStart(hunk),
+      end: getAnchorSearchEnd(hunk)
+    });
   if (!resolvedMatch) {
+    if (anchorMode === "tolerant" && hunk.anchorHint) {
+      throw new StaleHunkError("Hunk not found in any anchor affinity.", hunkErrorLocation(hunk));
+    }
     const staleDetail = `Hunk not found${renderAnchorSearchScope(hunk)}.`;
     const diagnosticMatch = hunk.anchorHint
       ? findOutsideAnchorDiagnosticMatch(currentEntries, hunk, matchOps)
@@ -342,7 +369,8 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
       selectorBaselineCharCount,
       survivingContextHashes,
       insertedHashes,
-      deletedHashes
+      deletedHashes,
+      ...(resolvedMatch.anchorResolution ? { anchorResolution: resolvedMatch.anchorResolution } : {})
     }
   };
 }
@@ -529,16 +557,20 @@ function findResolvedHunkMatch(
   entries: CurrentLineEntry[],
   hunk: Hunk,
   matchOps: readonly MatchPatchOp[],
-  searchStart: number,
-  searchEnd: number | undefined
+  search: HunkMatchSearch
 ): ResolvedHunkMatch | undefined {
+  const searchEnd = search.end ?? entries.length;
+  const errorScope = search.errorScope ?? renderAnchorSearchScope(hunk);
+  const matchFilter = search.matchFilter ?? (() => true);
+
   if (!hunkHasSmartSelector(hunk)) {
     const matches = hunkHasSparseRange(hunk)
-      ? findSparseMatches(entries, hunk.ops, 2, searchStart, searchEnd)
-      : findContiguousMatches(entries, matchOps, searchStart, searchEnd).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
+      ? findSparseMatches(entries, hunk.ops, 2, search.start, searchEnd, lineMatchesOp, matchFilter)
+      : findContiguousMatches(entries, matchOps, search.start, searchEnd, lineMatchesOp, matchFilter)
+        .map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
 
     if (matches.length > 1) {
-      throw new AmbiguousHunkError(`Hunk matched ${matches.length} spans${renderAnchorSearchScope(hunk)}.`, hunkErrorLocation(hunk));
+      throw new AmbiguousHunkError(`Hunk matched ${matches.length} spans${errorScope}.`, hunkErrorLocation(hunk));
     }
     if (matches.length === 1) {
       return { match: matches[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
@@ -547,19 +579,70 @@ function findResolvedHunkMatch(
   }
 
   const candidates = hunkHasSparseRange(hunk)
-    ? findSparseSmartMatchCandidates(entries, hunk.ops, searchStart, searchEnd)
-    : findContiguousSmartMatchCandidates(entries, hunk.ops, searchStart, searchEnd);
+    ? findSparseSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter)
+    : findContiguousSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter);
 
   if (candidates.length > SMART_MATCH_CANDIDATE_LIMIT) {
-    throw new AmbiguousHunkError(`Hunk exceeded smart match candidate cap (${SMART_MATCH_CANDIDATE_LIMIT})${renderAnchorSearchScope(hunk)}.`, hunkErrorLocation(hunk));
+    throw new AmbiguousHunkError(`Hunk exceeded smart match candidate cap (${SMART_MATCH_CANDIDATE_LIMIT})${errorScope}.`, hunkErrorLocation(hunk));
   }
   if (candidates.length === 0) return undefined;
 
   const bestCandidates = nonDominatedSmartCandidates(candidates, smartOpIndexes(hunk.ops));
   if (bestCandidates.length !== 1) {
-    throw new AmbiguousHunkError(`Hunk matched ${candidates.length} smart candidates with ${bestCandidates.length} non-dominated winners${renderAnchorSearchScope(hunk)}.`, hunkErrorLocation(hunk));
+    throw new AmbiguousHunkError(`Hunk matched ${candidates.length} smart candidates with ${bestCandidates.length} non-dominated winners${errorScope}.`, hunkErrorLocation(hunk));
   }
   return bestCandidates[0];
+}
+
+function findTolerantAnchorMatch(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[]
+): ResolvedHunkMatch | undefined {
+  if (!hunk.anchorHint) return undefined;
+
+  for (const affinity of ["contained", "overlapping", "outside"] as const) {
+    const resolved = findResolvedHunkMatch(entries, hunk, matchOps, anchorAffinitySearch(hunk, entries.length, affinity));
+    if (!resolved) continue;
+    if (affinity === "contained") return resolved;
+    return {
+      ...resolved,
+      anchorResolution: {
+        affinity,
+        authoredAnchor: {
+          startLine: hunk.anchorHint.line,
+          ...(hunk.anchorHint.endLine === undefined ? {} : { endLine: hunk.anchorHint.endLine })
+        },
+        resolvedMatch: { startLine: resolved.match.start + 1, endLine: resolved.match.end }
+      }
+    };
+  }
+  return undefined;
+}
+
+function anchorAffinitySearch(hunk: Hunk, lineCount: number, affinity: AnchorAffinity): HunkMatchSearch {
+  const anchor = hunk.anchorHint;
+  if (!anchor) throw new Error("Internal patch error: tolerant anchor resolution requires an anchor.");
+  if (affinity === "contained") {
+    return {
+      start: anchor.line - 1,
+      end: anchor.endLine ?? lineCount,
+      errorScope: " in contained anchor affinity"
+    };
+  }
+  return {
+    start: 0,
+    matchFilter: (match) => classifyAnchorAffinity(match, anchor, lineCount) === affinity,
+    errorScope: ` in ${affinity} anchor affinity`
+  };
+}
+
+function classifyAnchorAffinity(match: SparseMatch, anchor: NonNullable<Hunk["anchorHint"]>, lineCount: number): AnchorAffinity {
+  const anchorStart = anchor.line - 1;
+  const anchorEnd = anchor.endLine ?? lineCount;
+  if (match.start >= anchorStart && match.end <= anchorEnd) return "contained";
+  if (match.start < anchorEnd && match.end > anchorStart) return "overlapping";
+  return "outside";
 }
 
 function hunkHasSmartSelector(hunk: Hunk): boolean {
@@ -592,7 +675,7 @@ function findOutsideAnchorDiagnosticMatch(
 ): ResolvedHunkMatch | undefined {
   let diagnosticMatch: ResolvedHunkMatch | undefined;
   try {
-    diagnosticMatch = findResolvedHunkMatch(entries, hunk, matchOps, 0, undefined);
+    diagnosticMatch = findResolvedHunkMatch(entries, hunk, matchOps, { start: 0 });
   } catch (error) {
     if (error instanceof AmbiguousHunkError) return undefined;
     throw error;
@@ -805,13 +888,13 @@ function contiguousMatchToSparseMatch(ops: readonly Hunk["ops"][number][], start
   return { start, end: start + consumed, lineIndexes, ranges: new Map() };
 }
 
-function findContiguousSmartMatchCandidates(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], searchStart = 0, searchEnd = entries.length): SmartHunkCandidate[] {
+function findContiguousSmartMatchCandidates(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], searchStart = 0, searchEnd = entries.length, matchFilter: (match: SparseMatch) => boolean = () => true): SmartHunkCandidate[] {
   const candidates: SmartHunkCandidate[] = [];
   const matchOpCount = ops.filter(isMatchOp).length;
   const lastStart = Math.min(entries.length - matchOpCount, searchEnd - matchOpCount);
   for (let start = searchStart; start <= lastStart; start += 1) {
     const candidate = contiguousSmartMatchCandidateAt(entries, ops, start);
-    if (!candidate) continue;
+    if (!candidate || !matchFilter(candidate.match)) continue;
     candidates.push(candidate);
     if (candidates.length > SMART_MATCH_CANDIDATE_LIMIT) break;
   }
@@ -842,7 +925,7 @@ function contiguousSmartMatchCandidateAt(entries: readonly CurrentLineEntry[], o
   };
 }
 
-function findSparseSmartMatchCandidates(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], searchStart = 0, searchEnd = entries.length): SmartHunkCandidate[] {
+function findSparseSmartMatchCandidates(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], searchStart = 0, searchEnd = entries.length, matchFilter: (match: SparseMatch) => boolean = () => true): SmartHunkCandidate[] {
   const candidates: SmartHunkCandidate[] = [];
   for (let start = searchStart; start <= entries.length && start <= searchEnd && candidates.length <= SMART_MATCH_CANDIDATE_LIMIT; start += 1) {
     collectSparseSmartMatchCandidates({
@@ -856,7 +939,8 @@ function findSparseSmartMatchCandidates(entries: CurrentLineEntry[], ops: readon
       ranges: new Map(),
       smartMatcherKinds: new Map(),
       smartMatcherEditCosts: new Map(),
-      candidates
+      candidates,
+      matchFilter
     });
   }
   return candidates;
@@ -874,13 +958,15 @@ function collectSparseSmartMatchCandidates(state: {
   smartMatcherKinds: Map<number, PatchMatcherKind>;
   smartMatcherEditCosts: Map<number, number>;
   candidates: SmartHunkCandidate[];
+  matchFilter: (match: SparseMatch) => boolean;
 }): void {
   if (state.candidates.length > SMART_MATCH_CANDIDATE_LIMIT) return;
   const opIndex = nextMatchOpIndex(state.ops, state.opIndex);
   if (opIndex === undefined) {
-    if (state.position <= state.searchEnd) {
+    const match = { start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges };
+    if (state.position <= state.searchEnd && state.matchFilter(match)) {
       state.candidates.push({
-        match: { start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges },
+        match,
         smartMatcherKinds: state.smartMatcherKinds,
         smartMatcherEditCosts: state.smartMatcherEditCosts
       });
@@ -947,10 +1033,10 @@ function smartMatcherRank(kind: PatchMatcherKind | undefined): number {
   throw new Error("Internal patch error: missing smart matcher kind.");
 }
 
-function findSparseMatches(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], maxMatches: number, searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp): SparseMatch[] {
+function findSparseMatches(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], maxMatches: number, searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp, matchFilter: (match: SparseMatch) => boolean = () => true): SparseMatch[] {
   const matches: SparseMatch[] = [];
   for (let start = searchStart; start <= entries.length && start <= searchEnd && matches.length < maxMatches; start += 1) {
-    collectSparseMatches({ entries, ops, opIndex: 0, position: start, start, searchEnd, lineIndexes: new Map(), ranges: new Map(), matches, maxMatches, lineMatcher });
+    collectSparseMatches({ entries, ops, opIndex: 0, position: start, start, searchEnd, lineIndexes: new Map(), ranges: new Map(), matches, maxMatches, lineMatcher, matchFilter });
   }
   return matches;
 }
@@ -967,12 +1053,14 @@ function collectSparseMatches(state: {
   matches: SparseMatch[];
   maxMatches: number;
   lineMatcher: LineMatcher;
+  matchFilter: (match: SparseMatch) => boolean;
 }): void {
   if (state.matches.length >= state.maxMatches) return;
   const opIndex = nextMatchOpIndex(state.ops, state.opIndex);
   if (opIndex === undefined) {
-    if (state.position <= state.searchEnd) {
-      state.matches.push({ start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges });
+    const match = { start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges };
+    if (state.position <= state.searchEnd && state.matchFilter(match)) {
+      state.matches.push(match);
     }
     return;
   }
@@ -1011,11 +1099,11 @@ function renderSkippedContextRange(lineCount: number): string {
   return lineCount === 0 ? "..." : `... ${lineCount} skipped context line${lineCount === 1 ? "" : "s"}`;
 }
 
-function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp): number[] {
+function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp, matchFilter: (match: SparseMatch) => boolean = () => true): number[] {
   const matches: number[] = [];
   const lastStart = Math.min(entries.length - sequence.length, searchEnd - sequence.length);
   for (let index = searchStart; index <= lastStart; index += 1) {
-    if (sequence.every((op, offset) => lineMatcher(entries[index + offset], op))) {
+    if (sequence.every((op, offset) => lineMatcher(entries[index + offset], op)) && matchFilter(contiguousMatchToSparseMatch(sequence, index))) {
       matches.push(index);
       if (matches.length >= 2) break;
     }

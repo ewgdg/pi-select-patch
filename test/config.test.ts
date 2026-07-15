@@ -6,10 +6,12 @@ import { readSelectorPatchConfig } from "../src/config.js";
 
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
+const previousAnchorMode = process.env.PI_SELECT_PATCH_ANCHOR_MODE;
 
 afterEach(() => {
   restoreEnv("PI_CODING_AGENT_DIR", previousAgentDir);
   restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
+  restoreEnv("PI_SELECT_PATCH_ANCHOR_MODE", previousAnchorMode);
 });
 
 async function makeAgentDir(selectorPatchConfig?: unknown) {
@@ -35,6 +37,7 @@ describe("select patch config", () => {
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
       profile: "hash",
+      anchorMode: "strict",
     });
   });
 
@@ -43,6 +46,7 @@ describe("select patch config", () => {
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
       profile: "explicit",
+      anchorMode: "strict",
     });
   });
 
@@ -57,6 +61,7 @@ describe("select patch config", () => {
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
       profile: "smart",
+      anchorMode: "strict",
     });
   });
 
@@ -66,6 +71,40 @@ describe("select patch config", () => {
 
     await expect(readSelectorPatchConfig()).resolves.toEqual({
       profile: "smart",
+      anchorMode: "strict",
     });
+  });
+
+
+  it("reads tolerant anchor mode from global settings.json", async () => {
+    await makeAgentDir({ anchorMode: "tolerant" });
+
+    await expect(readSelectorPatchConfig()).resolves.toEqual({
+      profile: "smart",
+      anchorMode: "tolerant",
+    });
+  });
+
+  it("lets the anchor mode environment variable override global config", async () => {
+    await makeAgentDir({ anchorMode: "strict" });
+    process.env.PI_SELECT_PATCH_ANCHOR_MODE = "tolerant";
+
+    await expect(readSelectorPatchConfig()).resolves.toEqual({
+      profile: "smart",
+      anchorMode: "tolerant",
+    });
+  });
+
+  it("rejects invalid configured anchor mode", async () => {
+    await makeAgentDir({ anchorMode: "unsafe" });
+
+    await expect(readSelectorPatchConfig()).rejects.toThrow("Invalid pi-select-patch anchor mode");
+  });
+
+  it("rejects invalid environment anchor mode", async () => {
+    await makeAgentDir({ anchorMode: "tolerant" });
+    process.env.PI_SELECT_PATCH_ANCHOR_MODE = "unsafe";
+
+    await expect(readSelectorPatchConfig()).rejects.toThrow("Invalid pi-select-patch anchor mode");
   });
 });

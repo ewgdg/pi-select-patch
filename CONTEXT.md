@@ -5,9 +5,18 @@ Select Patch applies concise, uniquely targeted text changes while preserving ex
 ## Language
 
 **Line anchor**:
-A hard constraint limiting where a hunk may match. It is never an approximate location or permission to search beyond the stated boundary.
-_Avoid_: Proximity hint, approximate anchor
+A declared target interval used to resolve a hunk according to the active anchor mode.
+_Avoid_: Line hint
 
-**Out-of-bound match**:
-A unique hunk match that exists outside its line anchor. It may be reported for diagnosis but is never applied.
-_Avoid_: Retry match, fallback match
+**Strict anchor mode**:
+A resolution policy that permits only matches fully contained by the line anchor.
+
+**Tolerant anchor mode**:
+A hierarchical resolution policy that selects the best non-empty anchor-affinity class, then applies selector dominance within that class. It considers a weaker affinity class only when every stronger class has no candidates.
+
+**Anchor affinity**:
+A candidate's relationship to its line anchor, ordered as contained, overlapping, then outside.
+
+**Tolerated match**:
+A hunk match applied by tolerant anchor mode despite not being fully contained by its line anchor. Its use is reported as a warning.
+_Avoid_: Retry match, fallback match, out-of-bound match

@@ -15,12 +15,15 @@ Profiles control session defaults and read registration. Configure the profile i
 ```json
 {
   "pi-select-patch": {
-    "profile": "smart"
+    "profile": "smart",
+    "anchorMode": "strict"
   }
 }
 ```
 
 `profile` accepts `"explicit"`, `"smart"`, or `"hash"`. `PI_SELECT_PATCH_PROFILE` overrides the setting. Project-local `.pi/settings.json` does not change the profile. Default is `smart`: built-in `read` stays active with smart/status patch defaults. `explicit` keeps built-in `read` and exact/status patch defaults; `hash` replaces built-in `read` with hash-line `read` and uses hash/hash patch defaults.
+
+`anchorMode` accepts `"strict"` or `"tolerant"`. `PI_SELECT_PATCH_ANCHOR_MODE` overrides the setting. The default is `strict`; invalid configured or environment values fail startup. Strict anchors are hard boundaries. Tolerant anchors resolve contained matches first, then overlapping matches, then outside matches; a weaker class is considered only when every stronger class has no candidate. Tolerated overlapping or outside matches emit a visible warning with the authored anchor and resolved span.
 
 Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline convention (`LF`, `CRLF`, or `CR`) and final-newline state are preserved on update write. Empty file has zero logical lines.
 
@@ -87,7 +90,7 @@ Update sections use selector hunks:
 
 Rules:
 
-- Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. `@@ @<line>` starts searching at 1-based line `<line>` and requires the resolved match start to be at or after that line. `@@ @<start>...<end>` requires the resolved match span to stay within inclusive 1-based lines `<start>...<end>`. Anchors remain hard constraints: if bounded search is stale, a unique whole-file match may be reported as outside-anchor diagnostic, but it is never applied. Zero or ambiguous diagnostic matches leave the original stale detail unchanged.
+- Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. In strict anchor mode, `@@ @<line>` requires the resolved match start to be at or after 1-based line `<line>` and `@@ @<start>...<end>` requires the complete resolved span to stay within the inclusive range. A stale strict anchor may report a unique whole-file match as an outside-anchor diagnostic, but never applies it. In tolerant anchor mode, candidates are classified by complete resolved span as contained, overlapping, or outside. Resolution uses the first non-empty class in that order; ambiguity in that active class is terminal. A lower-bound anchor extends through EOF. Overlapping and outside applications produce a visible warning; contained and unanchored applications remain ordinary.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
 - In explicit profile, context/delete rows use `<operator><selector>` syntax. The operator is the leading row action: space or omitted for context, `-` for delete, `+` for literal insert content, and `/old`/`=new` pairs for replacement inside the previous context-selected line. The selector is the match payload after the context/delete operator: `:<text>`, `^<prefix>`, `*<needle>`, `?{...}`, `$<suffix>`, `~<text>`, hash-enabled `#<hash>`, or `...` range. A matcher / match row is operator plus selector. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` ~<text>` / `-~<text>` = opt-in smart context/delete text, hash-enabled ` #<hash>` / `-#<hash>` = hash context/delete (1 to 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector; `+~literal` inserts `~literal`. Replace pairs use raw text after `/` and `=` and do not consume a target line.
   In configured `profile: "hash"`, allowed update hunk rows are only hash context/delete selectors (` a`, `-b3`), ranges (` ...`, `-...`), literal inserts (`+literal`), and `/old`/`=new` replace pairs after context rows. `#` hash markers and text selectors are rejected.
@@ -158,7 +161,7 @@ With `profile: "hash"` or `receipt: "hash"`, `patch` success output is a compact
 +Z9xQ
 ```
 
-Update receipts show hunk headers, surviving context line hashes, and inserted-line hashes. Deleted rows are omitted. If the receipt exceeds visible output limits, the tool falls back to compact status rows with `Applied` or `Validated`. With `receipt: "status"`, success output is compact status rows only.
+Update receipts show hunk headers, surviving context line hashes, and inserted-line hashes. Deleted rows are omitted. Tolerated matches add a visible warning that names the affinity plus authored anchor and resolved span. If the receipt exceeds visible output limits, the tool falls back to compact status rows with `Applied` or `Validated` while preserving those warnings. With `receipt: "status"`, success output is compact status rows and any tolerated-match warnings.
 
 ## `details.diff`
 

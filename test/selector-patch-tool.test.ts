@@ -8,6 +8,7 @@ import { createPatchTool } from "../src/tools/selector-patch.js";
 const smartPatchTool = createPatchTool("smart");
 const explicitPatchTool = createPatchTool("explicit");
 const hashPatchTool = createPatchTool("hash");
+const tolerantExplicitPatchTool = createPatchTool("explicit", "tolerant");
 
 async function makePlainTempDir() {
   const dir = await mkdtemp(join(tmpdir(), "pi-select-patch-"));
@@ -132,6 +133,55 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
 }
 
 describe("patch visible status", () => {
+  it("warns in status receipts when tolerant anchor recovery is used", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "target");
+
+    const result = await tolerantExplicitPatchTool.execute(
+      "tool-call",
+      { patch: ["*** Update File: file.txt", "@@ @3...3", "-:target"].join("\n") },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toBe([
+      "*** Update File: file.txt",
+      "Applied",
+      "WARNING: Hunk 1 used tolerated outside match (authored anchor 3...3; resolved lines 1...1).",
+    ].join("\n"));
+    await expect(readFile(file, "utf8")).resolves.toBe("");
+  });
+
+  it("warns in hash receipts and dry runs when tolerant anchor recovery is used", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "target");
+    const patch = ["*** Update File: file.txt", "@@ @3...3", "-:target"].join("\n");
+
+    const hashResult = await tolerantExplicitPatchTool.execute(
+      "tool-call",
+      { patch, receipt: "hash" },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+    expect(resultText(hashResult)).toContain("WARNING: Hunk 1 used tolerated outside match");
+
+    await writeFile(file, "target");
+    const dryRunResult = await tolerantExplicitPatchTool.execute(
+      "tool-call",
+      { patch, dry_run: true },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+    expect(resultText(dryRunResult)).toContain("Validated");
+    expect(resultText(dryRunResult)).toContain("WARNING: Hunk 1 used tolerated outside match");
+    await expect(readFile(file, "utf8")).resolves.toBe("target");
+  });
+
   it("applies patch input starting at the file operation section", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");
@@ -1025,6 +1075,24 @@ describe("patch visible status", () => {
     );
   });
 
+  it("keeps tolerated-match warnings in partial-patch failures", async () => {
+    const dir = await makeExplicitTempDir();
+    await writeFile(join(dir, "one.txt"), "target");
+    const patch = [
+      "*** Update File: one.txt",
+      "@@ @3...3",
+      "-:target",
+      "*** Add File: missing-parent/two.txt",
+      "+second",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      tolerantExplicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("Applied:\n*** Update File: one.txt\nWARNING: Hunk 1 used tolerated outside match");
+  });
+
   it("writes a raw retry patch when syntax parsing fails", async () => {
     const dir = await makeTempDir();
     const patch = [
@@ -1327,6 +1395,26 @@ describe("patch visible status", () => {
     );
     expect(resultText(result)).not.toContain("line-1");
     await expect(readFile(file, "utf8")).resolves.toBe(manyLines.join("\n"));
+  });
+
+  it("keeps tolerated-match warnings when a hash receipt falls back to status", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "target");
+    const inserted = Array.from({ length: 2100 }, (_, index) => `+line-${index}`);
+    const patch = ["*** Update File: file.txt", "@@ @3...3", "-:target", ...inserted].join("\n");
+
+    const result = await tolerantExplicitPatchTool.execute(
+      "tool-call",
+      { patch, receipt: "hash" },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    const warning = "WARNING: Hunk 1 used tolerated outside match";
+    expect(resultText(result)).toContain(warning);
+    expect(resultText(result).split(warning)).toHaveLength(2);
   });
 
   it("omits empty statuses", async () => {

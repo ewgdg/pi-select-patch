@@ -6,8 +6,8 @@ import { hashProfileReadTool } from "./tools/selector-read.js";
 export default function piSelectPatch(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     const activeTools = pi.getActiveTools();
-    const { profile } = await readSelectorPatchConfig();
-    const patchTool = createPatchTool(profile);
+    const { profile, anchorMode } = await readSelectorPatchConfig();
+    const patchTool = createPatchTool(profile, anchorMode);
     pi.registerTool(patchTool);
     if (profile === "hash") {
       pi.registerTool(hashProfileReadTool);

@@ -261,6 +261,93 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText("", anchoredPatch(1, "+first"))).toThrow("anchor hint requires at least one context/deletion selector");
   });
 
+  it("keeps contained tolerant matches ordinary", () => {
+    const result = applyPatchToText("target\nold", anchoredRangePatch(1, 2, " :target", "-:old"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("target");
+    expect(result.hunkAudits[0].anchorResolution).toBeUndefined();
+  });
+
+  it("recovers a unique finite-anchor overlap in tolerant mode", () => {
+    const result = applyPatchToText("before\nstart\nold\nafter", anchoredRangePatch(3, 3, " :start", "-:old"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("before\nstart\nafter");
+    expect(result.hunkAudits[0].anchorResolution).toEqual({
+      affinity: "overlapping",
+      authoredAnchor: { startLine: 3, endLine: 3 },
+      resolvedMatch: { startLine: 2, endLine: 3 },
+    });
+  });
+
+  it("recovers a unique outside match in tolerant mode", () => {
+    const result = applyPatchToText("target", anchoredRangePatch(3, 3, "-:target"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("");
+    expect(result.hunkAudits[0].anchorResolution).toEqual({
+      affinity: "outside",
+      authoredAnchor: { startLine: 3, endLine: 3 },
+      resolvedMatch: { startLine: 1, endLine: 1 },
+    });
+  });
+
+  it("classifies a lower-bound match crossing its start as overlapping", () => {
+    const result = applyPatchToText("start\nold\nafter", anchoredPatch(2, " :start", "-:old"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("start\nafter");
+    expect(result.hunkAudits[0].anchorResolution?.affinity).toBe("overlapping");
+  });
+
+  it("uses complete sparse spans for tolerant anchor affinity", () => {
+    const result = applyPatchToText("start\nold\nmiddle\nend", anchoredRangePatch(3, 3, " :start", "-...", " :end"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("start\nend");
+    expect(result.hunkAudits[0].anchorResolution).toEqual({
+      affinity: "overlapping",
+      authoredAnchor: { startLine: 3, endLine: 3 },
+      resolvedMatch: { startLine: 1, endLine: 4 },
+    });
+  });
+
+  it("stops at ambiguity in the active tolerant affinity class", () => {
+    expect(() => applyPatchToText("x\nx\nx", anchoredRangePatch(2, 2, " :x", "-:x"), { anchorMode: "tolerant" })).toThrow(
+      "matched 2 spans in overlapping anchor affinity",
+    );
+  });
+
+  it("keeps a contained smart candidate ahead of a stronger outside candidate", () => {
+    const result = applyPatchToText("alpha beta\nalpha beta extra", anchoredRangePatch(2, 2, "-~alpha beta"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("alpha beta");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["prefix"]);
+    expect(result.hunkAudits[0].anchorResolution).toBeUndefined();
+  });
+
+  it("applies smart dominance within the active contained class", () => {
+    const result = applyPatchToText("alpha beta extra\nalpha beta", anchoredRangePatch(1, 2, "-~alpha beta"), { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("alpha beta extra");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact"]);
+  });
+
+  it("keeps original lines consumed by tolerated hunks unavailable to later hunks", () => {
+    const patch = [
+      anchoredRangePatch(3, 3, " :target", "+first"),
+      anchoredRangePatch(3, 3, " :target", "+second"),
+    ].join("\n");
+
+    expect(() => applyPatchToText("target", patch, { anchorMode: "tolerant" })).toThrow("Hunk not found in any anchor affinity");
+  });
+
+  it("does not let outside smart candidates consume an overlapping class candidate cap", () => {
+    const outsidePairs = Array.from({ length: 1001 }, () => ["match candidate", "end"] as const).flat();
+    const text = [...outsidePairs, "match candidate", "end"].join("\n");
+    const anchorLine = outsidePairs.length + 2;
+    const result = applyPatchToText(text, anchoredRangePatch(anchorLine, anchorLine, " ~match candidate", "-~end"), { anchorMode: "tolerant" });
+
+    expect(result.text.split("\n").at(-1)).toBe("match candidate");
+    expect(result.hunkAudits[0].anchorResolution?.affinity).toBe("overlapping");
+  });
+
   it("rejects API match ops containing both hash and text", () => {
     expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), content: "target" }] }] })).toThrow("hash+text selectors are not supported");
     expect(() => applyPatchToText("target\nold", { hunks: [{ ops: [{ kind: "context", hash: hashLine("target"), combinedSelector: { contains: ["target"] } }] }] })).toThrow("hash+text selectors are not supported");

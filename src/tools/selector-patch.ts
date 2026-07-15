@@ -14,7 +14,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { applyPatchToText, type ApplyPatchResult } from "../apply.js";
+import { applyPatchToText, type AnchorMode, type ApplyPatchResult, type PatchHunkAudit } from "../apply.js";
 import { type SelectorPatchProfile } from "../config.js";
 import {
   renderPatchHashReceiptDiffs,
@@ -59,7 +59,7 @@ import {
 } from "./patch-render.js";
 import { dedentBlock } from "../dedent.js";
 
-function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
+function buildPatchParameterDescription(profile: SelectorPatchProfile, anchorMode: AnchorMode): string {
   const hunkMatchDescription = indentNonBlankLines(buildPatchHunkMatchDescription(profile), "    ");
   const examples = indentNonBlankLines(buildPatchParameterExamples(profile), "    ");
   return dedentBlock(`
@@ -76,9 +76,7 @@ function buildPatchParameterDescription(profile: SelectorPatchProfile): string {
     ### Line Anchor
     A line anchor can be appended to a hunk header.
     Line number is 1-based.
-    Line anchors are hard search boundaries, not proximity hints.
-    They do not select the closest match.
-    Line anchors define the allowed 1-based match span: [start, +inf) for \`@@ @<start>\`, or [start, end] for \`@@ @<start>...<end>\`.
+${indentNonBlankLines(buildAnchorModeDescription(anchorMode), "    ")}
 ${hunkMatchDescription}
     Each context/delete selector row consumes exactly one target line. Adjacent selector rows must match adjacent target lines unless separated by a range row. Do not add separate keyword locator rows for the same physical line; shorten the selector row itself instead.
     ### Insertion
@@ -107,6 +105,13 @@ function indentNonBlankLines(text: string, indent: string): string {
     .split("\n")
     .map((line) => (line.length === 0 ? line : `${indent}${line}`))
     .join("\n");
+}
+
+function buildAnchorModeDescription(anchorMode: AnchorMode): string {
+  if (anchorMode === "tolerant") {
+    return "Line anchors use tolerant hierarchical resolution: contained matches first, then overlapping matches, then outside matches. A weaker class is considered only when the stronger class has no candidates. Overlapping and outside applications emit a visible warning with the authored anchor and resolved span.";
+  }
+  return "Line anchors are hard search boundaries, not proximity hints. They do not select the closest match. Line anchors define the allowed 1-based match span: [start, +inf) for `@@ @<start>`, or [start, end] for `@@ @<start>...<end>`.";
 }
 
 function buildPatchHunkMatchDescription(profile: SelectorPatchProfile): string {
@@ -352,7 +357,7 @@ const PATCH_PROFILE_DEFAULTS: Record<
   hash: { receipt: "hash" },
 };
 
-export function createPatchTool(profile: SelectorPatchProfile) {
+export function createPatchTool(profile: SelectorPatchProfile, anchorMode: AnchorMode = "strict") {
   return defineTool({
     name: "patch",
     label: "Select Patch",
@@ -360,8 +365,8 @@ export function createPatchTool(profile: SelectorPatchProfile) {
       "Token-efficient tool for editing files with multi-file-capable update patches.",
     promptSnippet:
       "Use this tool for line-based patching. Use shorter selectors.",
-    promptGuidelines: buildPatchPromptGuidelines(profile),
-    parameters: buildPatchToolParameters(profile),
+    promptGuidelines: buildPatchPromptGuidelines(profile, anchorMode),
+    parameters: buildPatchToolParameters(profile, anchorMode),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
     if (signal?.aborted) {
       throw new Error("Cancelled");
@@ -381,7 +386,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
 
     if (dryRun) {
       return buildPatchToolResult(
-        await planFileChangesForDryRun(ctx.cwd, universalPatch.operations),
+        await planFileChangesForDryRun(ctx.cwd, universalPatch.operations, anchorMode),
         universalPatch,
         true,
         executionOptions.receipt,
@@ -395,7 +400,7 @@ export function createPatchTool(profile: SelectorPatchProfile) {
       }
 
       try {
-        const change = await applyOperationSequentially(ctx.cwd, operation);
+        const change = await applyOperationSequentially(ctx.cwd, operation, anchorMode);
         plannedChanges.push(change);
       } catch (error) {
         const retryPatch = await tryWriteRetryPatch(
@@ -460,12 +465,12 @@ export function createPatchTool(profile: SelectorPatchProfile) {
 }
 
 
-function buildPatchToolParameters(profile: SelectorPatchProfile) {
+function buildPatchToolParameters(profile: SelectorPatchProfile, anchorMode: AnchorMode) {
   return Type.Object(
     {
       patch: Type.Optional(
         Type.String({
-          description: buildPatchParameterDescription(profile),
+          description: buildPatchParameterDescription(profile, anchorMode),
         }),
       ),
       patch_file: Type.Optional(
@@ -490,7 +495,7 @@ function buildPatchToolParameters(profile: SelectorPatchProfile) {
   );
 }
 
-function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
+function buildPatchPromptGuidelines(profile: SelectorPatchProfile, anchorMode: AnchorMode): string[] {
   return [
     dedentBlock(`
       <patch_tool_policy>
@@ -500,11 +505,18 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
       ${profile === "explicit" ? "Explicit profile supports selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}
       Use range selector whenever possible for spans over 3 lines.
-      Avoid using line anchors when uncertain on line offset. For \`@@ @<start>\`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For \`@@ @<start>...<end>\`, expand both bounds with a safety margin for expected line drift.
+      ${buildAnchorModePromptGuideline(anchorMode)}
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
       </patch_tool_policy>
     `),
   ];
+}
+
+function buildAnchorModePromptGuideline(anchorMode: AnchorMode): string {
+  if (anchorMode === "tolerant") {
+    return "Tolerant anchor mode is active. Anchored hunks resolve contained, then overlapping, then outside candidates; ambiguity in any active class stops resolution. A tolerated overlapping or outside match is applied only with a visible warning that reports the authored anchor and resolved span.";
+  }
+  return "Line anchors are hard search boundaries, not proximity hints. Avoid using them when uncertain on line offset. For `@@ @<start>`, set the start before the expected match with a safety margin to tolerate upward line drift. Wider margins may reintroduce ambiguity. For `@@ @<start>...<end>`, expand both bounds with a safety margin for expected line drift.";
 }
 
 function buildPatchProfilePromptGuideline(profile: SelectorPatchProfile): string {
@@ -579,10 +591,11 @@ async function parsePatchInputWithRetryPatch(
 async function applyOperationSequentially(
   cwd: string,
   operation: UniversalPatchOperation,
+  anchorMode: AnchorMode,
 ): Promise<PlannedFileChange> {
   const operationTarget = await prepareOperationTarget(cwd, operation);
   return withFileMutationQueue(operationTarget.targetPath, async () => {
-    const change = await planFileChange(operationTarget);
+    const change = await planFileChange(operationTarget, anchorMode);
     await writePlannedChange(change);
     return change;
   });
@@ -611,19 +624,10 @@ async function prepareOperationTarget(
   return { operation, targetPath };
 }
 
-async function planFileChanges(
-  operationTargets: readonly OperationTarget[],
-): Promise<PlannedFileChange[]> {
-  const plannedChanges: PlannedFileChange[] = [];
-  for (const operationTarget of operationTargets) {
-    plannedChanges.push(await planFileChange(operationTarget));
-  }
-  return plannedChanges;
-}
-
 async function planFileChangesForDryRun(
   cwd: string,
   operations: readonly UniversalPatchOperation[],
+  anchorMode: AnchorMode,
 ): Promise<PlannedFileChange[]> {
   const plannedChanges: PlannedFileChange[] = [];
   const virtualFiles = new Map<string, DryRunFileState>();
@@ -633,6 +637,7 @@ async function planFileChangesForDryRun(
     const change = await planFileChangeForDryRun(
       { operation, targetPath },
       virtualFiles,
+      anchorMode,
     );
     plannedChanges.push(change);
     updateDryRunFileState(virtualFiles, change);
@@ -675,6 +680,7 @@ async function resolvePathThroughExistingParent(
 async function planFileChangeForDryRun(
   operationTarget: OperationTarget,
   virtualFiles: Map<string, DryRunFileState>,
+  anchorMode: AnchorMode,
 ): Promise<PlannedFileChange> {
   const { operation, targetPath } = operationTarget;
   const state = virtualFiles.get(targetPath);
@@ -691,7 +697,7 @@ async function planFileChangeForDryRun(
   }
 
   const oldText = await readDryRunExistingText(targetPath, state);
-  const applyResult = applyPatchToText(oldText, operation.patch);
+  const applyResult = applyPatchToText(oldText, operation.patch, { anchorMode });
   return {
     operation: "update",
     patchPath: operation.path,
@@ -819,10 +825,10 @@ function renderAppliedOperationList(
     return "(none)";
   }
   return changes
-    .map(
-      (change) =>
-        `*** ${capitalizeOperation(change.operation)} File: ${change.patchPath}`,
-    )
+    .flatMap((change) => [
+      `*** ${capitalizeOperation(change.operation)} File: ${change.patchPath}`,
+      ...renderToleratedMatchWarnings(change),
+    ])
     .join("\n");
 }
 
@@ -886,6 +892,7 @@ function buildPatchToolResult(
 
 async function planFileChange(
   operationTarget: OperationTarget,
+  anchorMode: AnchorMode,
 ): Promise<PlannedFileChange> {
   const { operation, targetPath } = operationTarget;
   if (operation.kind === "add") {
@@ -904,7 +911,7 @@ async function planFileChange(
     writable: true,
   });
 
-  const applyResult = applyPatchToText(oldText, operation.patch);
+  const applyResult = applyPatchToText(oldText, operation.patch, { anchorMode });
   return {
     operation: "update",
     patchPath: operation.path,
@@ -1057,9 +1064,12 @@ function buildPatchStatusDecision(
   dryRun: boolean,
   receipt: PatchReceiptMode,
 ): PatchStatusDecision {
-  const visibleText = receipt === "hash"
+  const receiptText = receipt === "hash"
     ? renderPatchHashReceiptDiffs(plannedChanges.map(toDiffInput))
     : renderUniversalPatchStatus(plannedChanges, dryRun);
+  const visibleText = receipt === "hash"
+    ? appendToleratedMatchWarnings(receiptText, plannedChanges)
+    : receiptText;
   const visibleLineCount = countRenderedLines(visibleText);
   const overflow = getVisibleOutputOverflow(visibleText, visibleLineCount);
   if (overflow) {
@@ -1094,7 +1104,29 @@ function renderFileStatus(change: PlannedFileChange, dryRun: boolean): string {
   return [
     `*** ${capitalizeOperation(change.operation)} File: ${change.patchPath}`,
     status,
+    ...renderToleratedMatchWarnings(change),
   ].join("\n");
+}
+
+function appendToleratedMatchWarnings(text: string, changes: readonly PlannedFileChange[]): string {
+  const warnings = changes.flatMap(renderToleratedMatchWarnings);
+  return warnings.length === 0 ? text : [text, ...warnings].filter((part) => part.length > 0).join("\n");
+}
+
+function renderToleratedMatchWarnings(change: PlannedFileChange): string[] {
+  return (change.applyResult?.hunkAudits ?? [])
+    .flatMap(renderToleratedMatchWarning);
+}
+
+function renderToleratedMatchWarning(audit: PatchHunkAudit): string[] {
+  const resolution = audit.anchorResolution;
+  if (!resolution) return [];
+  const authoredEnd = resolution.authoredAnchor.endLine;
+  const authoredAnchor = authoredEnd === undefined
+    ? `${resolution.authoredAnchor.startLine}...EOF`
+    : `${resolution.authoredAnchor.startLine}...${authoredEnd}`;
+  const resolvedMatch = `${resolution.resolvedMatch.startLine}...${resolution.resolvedMatch.endLine}`;
+  return [`WARNING: Hunk ${audit.hunkIndex} used tolerated ${resolution.affinity} match (authored anchor ${authoredAnchor}; resolved lines ${resolvedMatch}).`];
 }
 
 function toDiffInput(change: PlannedFileChange): PatchTranscriptDiffInput {

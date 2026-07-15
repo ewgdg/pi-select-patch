@@ -122,8 +122,8 @@ File operations:
 Hunk headers:
 
 - `@@` searches whole file.
-- `@@ @<line>` searches at or after a 1-based line.
-- `@@ @<start>...<end>` keeps resolved match inside an inclusive line range.
+- `@@ @<line>` and `@@ @<start>...<end>` use strict hard boundaries by default.
+- Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to recover unique overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
 
 Within one file section, later hunks can only match untouched original lines. Use another `*** Update File` section for same path when a later edit must depend on earlier output.
 
@@ -139,6 +139,6 @@ Dry runs validate and return normal receipt shape without writing.
 
 Extension registers `patch`, keeps built-in `write`, and hides built-in `edit` plus old selector tool names. Smart profile also keeps built-in `read`.
 
-Set alternative profiles under `pi-select-patch.profile` in the global `~/.pi/agent/settings.json`. `PI_SELECT_PATCH_PROFILE` takes precedence.
+Set profiles and anchor policy under `pi-select-patch.profile` and `pi-select-patch.anchorMode` in the global `~/.pi/agent/settings.json`. `PI_SELECT_PATCH_PROFILE` and `PI_SELECT_PATCH_ANCHOR_MODE` take precedence. Anchor mode defaults to `strict`; use `tolerant` only when visible stale-anchor recovery is appropriate.
 
 Alternative profiles and full format details live in [docs/patch-format.md](docs/patch-format.md). Smart profile remains recommended default.
