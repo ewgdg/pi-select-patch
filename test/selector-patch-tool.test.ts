@@ -240,9 +240,9 @@ describe("patch visible status", () => {
     expect(guideline).not.toContain("larger hunk with several neighboring short selectors");
     expect(guideline).not.toContain("Prefer short selectors plus accurate line anchors");
     expect(guideline).not.toContain("or an anchor hint");
-    expect(guideline).toContain("safety margin");
-    expect(guideline).toContain("upward line drift");
-    expect(guideline).toContain("Wider margins may reintroduce ambiguity");
+    expect(guideline).not.toContain("safety margin");
+    expect(guideline).not.toContain("upward line drift");
+    expect(guideline).not.toContain("Wider margins may reintroduce ambiguity");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
     expect(guideline).toContain("</patch_tool_policy>");
