@@ -100,7 +100,7 @@ One call can update several files. File sections run in authored order.
 +new expectation
 ```
 
-## `patch`
+## `edit`
 
 Provide exactly one of `patch` or `patch_file`. Patch files and target file paths resolve from tool working directory.
 
@@ -117,7 +117,7 @@ File operations:
 
 - `*** Update File: path` updates existing UTF-8 text files.
 - Use Pi's built-in `write` tool for new files.
-- Whole-file deletion is not supported by `patch`.
+- Whole-file deletion is not supported by `edit`.
 
 Hunk headers:
 
@@ -137,7 +137,7 @@ Dry runs validate and return normal receipt shape without writing.
 
 ## Pi integration
 
-Extension registers `patch`, keeps built-in `write`, and hides built-in `edit` plus old selector tool names. Smart profile also keeps built-in `read`.
+Extension registers selector editing as `edit`, replacing Pi's built-in `edit` interface, and keeps built-in `write`. Smart profile also keeps built-in `read`.
 
 Set profiles and anchor policy under `pi-select-patch.profile` and `pi-select-patch.anchorMode` in the global `~/.pi/agent/settings.json`. `PI_SELECT_PATCH_PROFILE` and `PI_SELECT_PATCH_ANCHOR_MODE` take precedence. Anchor mode defaults to `strict`; use `tolerant` only when visible stale-anchor recovery is appropriate.
 

@@ -62,15 +62,15 @@ describe("tool output size guards", () => {
     ).toThrow(/\[E_OUTPUT_TOO_LARGE\].*lines.*lower limit.*offset/);
   });
 
-  it("rejects overlarge patch guard output without redundant read_hash guidance", () => {
+  it("rejects overlarge edit guard output without redundant read_hash guidance", () => {
     const rows = oneOverLineCap();
     const rendered = rows.map((content) => `+${hashLine(content)}`).join("\n");
 
     expect(() =>
-      assertHashlineOutputFits("patch", rendered, rows.length),
-    ).toThrow(/\[E_OUTPUT_TOO_LARGE\].*Patch was not written by this guard\./);
+      assertHashlineOutputFits("edit", rendered, rows.length),
+    ).toThrow(/\[E_OUTPUT_TOO_LARGE\].*Edit was not written by this guard\./);
     expect(() =>
-      assertHashlineOutputFits("patch", rendered, rows.length),
+      assertHashlineOutputFits("edit", rendered, rows.length),
     ).not.toThrow(/Use read_hash to inspect current file hashes/);
   });
 

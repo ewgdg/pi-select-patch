@@ -33,7 +33,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("<toolTitle>patch</toolTitle>");
+    expect(rendered).toContain("<toolTitle>edit</toolTitle>");
     expect(rendered).toContain(`Agent input streaming (patch, last ${COLLAPSED_STREAMING_INPUT_MAX_LINES}/${COLLAPSED_STREAMING_INPUT_MAX_LINES + 2} lines):`);
     expect(rendered).toContain("... 2 earlier input lines omitted; Ctrl+O to expand");
     expect(rendered).toContain("<dim> 3 │ </dim><toolDiffContext>line-3</toolDiffContext>");
@@ -50,7 +50,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toBe("<toolTitle>patch</toolTitle> <muted>dry-run</muted>");
+    expect(rendered).toBe("<toolTitle>edit</toolTitle> <muted>dry-run</muted>");
     expect(rendered).not.toContain("Agent input streaming");
     expect(rendered).not.toContain("*** Begin Patch");
   });
@@ -199,7 +199,7 @@ describe("patch renderer helpers", () => {
   it("handles partial, error, and no-diff result states cleanly", () => {
     expect(
       buildPatchResultRenderText({ details: undefined, expanded: false, isPartial: true, isError: false, theme })
-    ).toBe("<warning>Applying patch...</warning>");
+    ).toBe("<warning>Applying edit...</warning>");
     expect(
       buildPatchResultRenderText({
         resultText: "Error: stale\nmore",
@@ -225,7 +225,7 @@ describe("patch renderer helpers", () => {
   it("brings partial patch failure details before the input preview", () => {
     const rendered = buildPatchResultRenderText({
       resultText: [
-        "[E_PARTIAL_PATCH] Patch stopped after 0 applied operations.",
+        "[E_PARTIAL_PATCH] Edit stopped after 0 applied operations.",
         "Applied:",
         "(none)",
         "Failed:",
@@ -255,7 +255,7 @@ describe("patch renderer helpers", () => {
   it("renders retry patch copy failures in compact partial errors", () => {
     const rendered = buildPatchResultRenderText({
       resultText: [
-        "[E_PARTIAL_PATCH] Patch stopped after 0 applied operations.",
+        "[E_PARTIAL_PATCH] Edit stopped after 0 applied operations.",
         "Applied:",
         "(none)",
         "Failed:",
@@ -341,7 +341,7 @@ describe("patch renderer helpers", () => {
       theme
     });
 
-    expect(rendered).toContain("Patch dry-run succeeded");
+    expect(rendered).toContain("Edit dry-run succeeded");
     expect(rendered).toContain("<toolDiffAdded>+1</toolDiffAdded>");
     expect(rendered).toContain("<toolDiffRemoved>-1</toolDiffRemoved>");
     expect(rendered).toContain("<toolDiffRemoved>-old</toolDiffRemoved>");

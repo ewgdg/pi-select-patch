@@ -1,5 +1,7 @@
 # Selector patch format
 
+The Pi tool is `edit`; this document describes the patch input format it accepts.
+
 ## Optional hash selectors
 
 Use `read` under `profile: "hash"` to render logical text lines as:
@@ -152,7 +154,7 @@ Use a `/old` row immediately followed by a `=new` row after a context selector t
 
 ## Success receipt
 
-With `profile: "hash"` or `receipt: "hash"`, `patch` success output is a compact hash-only receipt, not a full patched file:
+With `profile: "hash"` or `receipt: "hash"`, `edit` success output is a compact hash-only receipt, not a full patched file:
 
 ```text
 *** Update File: existing.txt
@@ -166,9 +168,10 @@ Update receipts show hunk headers, surviving context line hashes, and inserted-l
 ## `details.diff`
 
 Tool result details include `details.diff`: a human patch transcript for host/UI. Update entries show resolved hunk transcript lines. This diff is not placed in model-visible output. Pi TUI human rendering reads this field and shows a colorized preview in collapsed mode, with a larger transcript view when expanded.
+Successful `edit` results also include required `details.patch`, a standard unified diff string for every planned file change. Selector-specific metadata remains available alongside this built-in edit contract.
 Tool result details also include `details.patchSize`, with the complete normalized authored patch character count and equivalent exact unified-diff character count. File headers, hunk headers, optional outer boundaries, body rows, and normalized line separators are included. Equivalent unified-diff rows expand selectors, ranges, and replacements; empty context lines use physically blank rows. Pi TUI renders `Patch size: <patch> vs <unified> chars (<difference> than unified diff)`.
 `details.selectorEfficiency` remains selector-only structured metadata. Insert rows are excluded; no selector-cost footer is rendered.
-When patch execution fails, parser errors include an input line number. Pi TUI rendering shows the first error line plus a bounded preview of the actual agent input (`patch` text, or the `patch_file` path); when a line number is available, the inline `patch` preview is centered around that line. Partial apply failures lift the `Failed:` operation and retry patch path above the input preview so the real cause is visible without expanding the tool result.
+When `edit` execution fails, parser errors include an input line number. Pi TUI rendering shows the first error line plus a bounded preview of the actual agent input (`patch` text, or the `patch_file` path); when a line number is available, the inline `patch` preview is centered around that line. Partial apply failures lift the `Failed:` operation and retry patch path above the input preview so the real cause is visible without expanding the tool result.
 
 ## Collision risk
 

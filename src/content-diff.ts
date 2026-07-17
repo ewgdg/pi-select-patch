@@ -1,4 +1,5 @@
 import type { ApplyPatchResult, PatchTranscriptLine } from "./apply.js";
+import { generateUnifiedPatch } from "@earendil-works/pi-coding-agent";
 import { hashLine } from "./hash.js";
 import { parseText } from "./text-lines.js";
 
@@ -14,6 +15,12 @@ export interface PatchTranscriptDiffInput {
 
 export function renderPatchTranscriptDiffs(inputs: readonly PatchTranscriptDiffInput[]): string {
   return inputs.map(renderPatchTranscriptDiff).join("\n");
+}
+
+export function renderPatchUnifiedDiffs(inputs: readonly PatchTranscriptDiffInput[]): string {
+  return inputs
+    .map((input) => generateUnifiedPatch(input.path, input.oldText ?? "", input.newText ?? ""))
+    .join("");
 }
 
 export function renderPatchHashReceiptDiffs(inputs: readonly PatchTranscriptDiffInput[]): string {

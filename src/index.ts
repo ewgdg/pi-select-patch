@@ -7,22 +7,21 @@ export default function piSelectPatch(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     const activeTools = pi.getActiveTools();
     const { profile, anchorMode } = await readSelectorPatchConfig();
-    const patchTool = createPatchTool(profile, anchorMode);
-    pi.registerTool(patchTool);
+    const editTool = createPatchTool(profile, anchorMode);
+    pi.registerTool(editTool);
     if (profile === "hash") {
       pi.registerTool(hashProfileReadTool);
     }
     const requiredSelectorTools =
-      profile === "hash" ? [hashProfileReadTool.name, patchTool.name] : [patchTool.name];
-    const withoutConflictingTools = activeTools.filter(
+      profile === "hash" ? [hashProfileReadTool.name, editTool.name] : [editTool.name];
+    const withoutStaleSelectorTools = activeTools.filter(
       (tool) =>
-        tool !== "edit" &&
         tool !== "read_hash" &&
         tool !== "selector_read" &&
         tool !== "selector_patch",
     );
     pi.setActiveTools([
-      ...new Set([...withoutConflictingTools, ...requiredSelectorTools]),
+      ...new Set([...withoutStaleSelectorTools, ...requiredSelectorTools]),
     ]);
   });
 }

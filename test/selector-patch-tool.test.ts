@@ -69,6 +69,8 @@ const resultText = (result: Awaited<ReturnType<typeof smartPatchTool.execute>>) 
 };
 const detailsDiff = (result: Awaited<ReturnType<typeof smartPatchTool.execute>>) =>
   (result.details as { diff: string }).diff;
+const detailsPatch = (result: Awaited<ReturnType<typeof smartPatchTool.execute>>) =>
+  (result.details as { patch: string }).patch;
 const detailsPatchSize = (
   result: Awaited<ReturnType<typeof smartPatchTool.execute>>,
 ) =>
@@ -132,7 +134,60 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
   return { dir, file, result };
 }
 
-describe("patch visible status", () => {
+describe("edit visible status", () => {
+  it.each([
+    ["status update", async () => {
+      const dir = await makePlainTempDir();
+      await writeFile(join(dir, "file.txt"), "old\n");
+      return smartPatchTool.execute(
+        "tool-call",
+        { patch: ["*** Update File: file.txt", "@@", "-old", "+new"].join("\n") },
+        undefined,
+        undefined,
+        { cwd: dir } as never,
+      );
+    }],
+    ["hash update", async () => {
+      const dir = await makePlainTempDir();
+      await writeFile(join(dir, "file.txt"), "old\n");
+      return hashPatchTool.execute(
+        "tool-call",
+        { patch: ["*** Update File: file.txt", "@@", hashProfileRow("-", "old"), "+new"].join("\n"), receipt: "hash" },
+        undefined,
+        undefined,
+        { cwd: dir } as never,
+      );
+    }],
+    ["dry-run update", async () => {
+      const dir = await makePlainTempDir();
+      await writeFile(join(dir, "file.txt"), "old\n");
+      return explicitPatchTool.execute(
+        "tool-call",
+        { patch: ["*** Update File: file.txt", "@@", "-:old", "+new"].join("\n"), dry_run: true },
+        undefined,
+        undefined,
+        { cwd: dir } as never,
+      );
+    }],
+    ["add", async () => {
+      const dir = await makePlainTempDir();
+      return explicitPatchTool.execute(
+        "tool-call",
+        { patch: ["*** Add File: added.txt", "+new"].join("\n") },
+        undefined,
+        undefined,
+        { cwd: dir } as never,
+      );
+    }],
+  ])("returns the built-in edit patch contract for %s", async (_label, makeResult) => {
+    const result = await makeResult();
+    const patch = detailsPatch(result);
+    expect(patch).toMatch(/^--- file\.txt|^--- added\.txt/m);
+    expect(patch).toMatch(/^\+\+\+ (?:file|added)\.txt/m);
+    expect(patch).toMatch(/^@@ /m);
+    expect(detailsDiff(result)).toBeTruthy();
+  });
+
   it("warns in status receipts when tolerant anchor recovery is used", async () => {
     const dir = await makeExplicitTempDir();
     const file = join(dir, "file.txt");
@@ -230,10 +285,11 @@ describe("patch visible status", () => {
   it("keeps patch behavior policy in one prompt guideline chunk", () => {
     expect(smartPatchTool.promptGuidelines).toHaveLength(1);
     const guideline = smartPatchTool.promptGuidelines?.[0] ?? "";
-    expect(smartPatchTool.promptSnippet).toBe("Use this tool for line-based patching. Use shorter selectors.");
+    expect(smartPatchTool.promptSnippet).toBe("Use edit for line-based file changes. Use shorter selectors.");
     expect(smartPatchTool.promptSnippet).not.toContain("first attempt");
 
-    expect(guideline).toContain("<patch_tool_policy>");
+    expect(guideline).toContain("<edit_tool_policy>");
+    expect(guideline).not.toContain("<patch_tool_policy>");
     expect(guideline).toContain("smallest set of short selectors");
     expect(guideline).toContain("add one neighboring short selector before lengthening");
     expect(guideline).toContain("Only lengthen a selector after a stale or ambiguous failure");
@@ -245,7 +301,7 @@ describe("patch visible status", () => {
     expect(guideline).not.toContain("Wider margins may reintroduce ambiguity");
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
-    expect(guideline).toContain("</patch_tool_policy>");
+    expect(guideline).toContain("</edit_tool_policy>");
   });
 
   it("is agent-visible as a hash receipt without selector cost metric", async () => {
@@ -259,7 +315,7 @@ describe("patch visible status", () => {
 
     const { file, result } = await patchFile("a\nold\nz\n", diff);
 
-    expect(smartPatchTool.name).toBe("patch");
+    expect(smartPatchTool.name).toBe("edit");
     expect(resultText(result)).toBe(
       [
         "*** Update File: file.txt",
@@ -304,7 +360,7 @@ describe("patch visible status", () => {
     await expect(readFile(file, "utf8")).resolves.toBe("new");
   });
 
-  it("supports literal replace rows in patch tool updates", async () => {
+  it("supports literal replace rows in edit updates", async () => {
     const dir = await makePlainTempDir();
     const file = join(dir, "file.txt");
     await writeFile(file, "const timeoutMs = 5000;\n");

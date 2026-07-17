@@ -19,6 +19,7 @@ import { type SelectorPatchProfile } from "../config.js";
 import {
   renderPatchHashReceiptDiffs,
   renderPatchTranscriptDiffs,
+  renderPatchUnifiedDiffs,
   type PatchTranscriptDiffInput,
 } from "../content-diff.js";
 import {
@@ -359,12 +360,12 @@ const PATCH_PROFILE_DEFAULTS: Record<
 
 export function createPatchTool(profile: SelectorPatchProfile, anchorMode: AnchorMode = "strict") {
   return defineTool({
-    name: "patch",
-    label: "Select Patch",
+    name: "edit",
+    label: "Select Edit",
     description:
-      "Token-efficient tool for editing files with multi-file-capable update patches.",
+      "Token-efficient tool for editing files with multi-file-capable selector edits.",
     promptSnippet:
-      "Use this tool for line-based patching. Use shorter selectors.",
+      "Use edit for line-based file changes. Use shorter selectors.",
     promptGuidelines: buildPatchPromptGuidelines(profile),
     parameters: buildPatchToolParameters(profile, anchorMode),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -487,7 +488,7 @@ function buildPatchToolParameters(profile: SelectorPatchProfile, anchorMode: Anc
       receipt: Type.Optional(
         Type.Union([Type.Literal("status"), Type.Literal("hash")], {
           description:
-            "Patch result receipt. Overrides the configured profile default.",
+            "Edit result receipt. Overrides the configured profile default.",
         }),
       ),
     },
@@ -498,7 +499,7 @@ function buildPatchToolParameters(profile: SelectorPatchProfile, anchorMode: Anc
 function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
   return [
     dedentBlock(`
-      <patch_tool_policy>
+      <edit_tool_policy>
       Start with the smallest set of short selectors that can uniquely identify the hunk.
       Minimize selector text and unnecessary selector rows; surrounding short context provides safety without copied full lines.
       ${buildPatchProfilePromptGuideline(profile)}
@@ -506,14 +507,14 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
       ${buildPatchProfilePolicy(profile)}
       Use range selector whenever possible for spans over 3 lines.
       If the tool returns a retry patch file containing large chunks of unapplied operations due to failures, fix the retry patch file and pass it via \`patch_file\` instead of re-emitting large patch text.
-      </patch_tool_policy>
+      </edit_tool_policy>
     `),
   ];
 }
 
 function buildPatchProfilePromptGuideline(profile: SelectorPatchProfile): string {
   if (profile === "hash") {
-    return "Hash profile active: hunk context rows use hashes after operators. `patch` success returns a compact hash-only receipt with context hashes and inserted-line hashes. Treat patch receipt as current state for touched hunks.";
+    return "Hash profile active: hunk context rows use hashes after operators. `edit` success returns a compact hash-only receipt with context hashes and inserted-line hashes. Treat the edit receipt as current state for touched hunks.";
   }
   if (profile === "smart") {
     return "";
@@ -793,7 +794,7 @@ function renderSequentialFailureMessage(args: {
   cause: unknown;
 }): string {
   const sections = [
-    `Patch stopped after ${args.appliedChanges.length} applied operation${args.appliedChanges.length === 1 ? "" : "s"}.`,
+    `Edit stopped after ${args.appliedChanges.length} applied operation${args.appliedChanges.length === 1 ? "" : "s"}.`,
     "Applied:",
     renderAppliedOperationList(args.appliedChanges),
     "Failed:",
@@ -861,6 +862,7 @@ function buildPatchToolResult(
     details: {
       dryRun,
       diff: renderPatchTranscriptDiffs(plannedChanges.map(toDiffInput)),
+      patch: renderPatchUnifiedDiffs(plannedChanges.map(toDiffInput)),
       files: plannedChanges.map((change) => ({
         path: change.targetPath,
         patchPath: change.patchPath,

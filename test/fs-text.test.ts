@@ -55,7 +55,7 @@ describe("text file IO", () => {
   });
 });
 
-describe("patch tool", () => {
+describe("edit tool", () => {
   it("dry_run validates and returns status without writing", async () => {
     const dir = await makeTempDir();
     const file = join(dir, "file.txt");

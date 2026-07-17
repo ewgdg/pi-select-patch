@@ -9,7 +9,7 @@ const piDefaultMaxLines = (PiCodingAgent as { DEFAULT_MAX_LINES?: unknown }).DEF
 export const LLM_VISIBLE_OUTPUT_MAX_LINES =
   typeof piDefaultMaxLines === "number" ? piDefaultMaxLines : LOCAL_DEFAULT_MAX_LINES;
 
-type HashlineToolName = "read" | "read_hash" | "patch";
+type HashlineToolName = "read" | "read_hash" | "edit";
 
 export interface VisibleOutputOverflow {
   kind: "lines" | "bytes";
@@ -56,6 +56,6 @@ function outputTooLargeError(toolName: HashlineToolName, overflow: VisibleOutput
   }
 
   return new OutputTooLargeError(
-    `patch visible receipt is ${overflow.actual}, exceeding ${overflow.max}. Patch was not written by this guard.`
+    `edit visible receipt is ${overflow.actual}, exceeding ${overflow.max}. Edit was not written by this guard.`
   );
 }

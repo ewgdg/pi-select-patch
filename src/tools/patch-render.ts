@@ -183,7 +183,7 @@ export function buildPatchCallRenderText(options: {
   theme: PatchRenderTheme;
 }): string {
   const { input, expanded, argsComplete, theme } = options;
-  const title = theme.fg("toolTitle", "patch");
+  const title = theme.fg("toolTitle", "edit");
 
   if (argsComplete) {
     return formatPatchCallHeader(input, title, theme);
@@ -227,7 +227,7 @@ export function buildPatchResultRenderText(options: {
 }): string {
   const { resultText, details, expanded, isPartial, isError, errorInput, theme } = options;
   if (isPartial) {
-    return theme.fg("warning", "Applying patch...");
+    return theme.fg("warning", "Applying edit...");
   }
 
   if (isError) {
@@ -238,13 +238,13 @@ export function buildPatchResultRenderText(options: {
 
   const diff = getPatchResultDiff(details);
   if (!diff) {
-    return theme.fg("success", firstLine(resultText) ?? "Patch completed");
+    return theme.fg("success", firstLine(resultText) ?? "Edit completed");
   }
 
   const stats = getPatchDiffStats(diff);
   const dryRun = isRecord(details) && details.dryRun === true;
   const summaryParts = [
-    dryRun ? "Patch dry-run succeeded" : "Patch applied",
+    dryRun ? "Edit dry-run succeeded" : "Edit applied",
     theme.fg("toolDiffAdded", `+${stats.additions}`),
     theme.fg("toolDiffRemoved", `-${stats.removals}`),
   ];
@@ -443,7 +443,7 @@ function firstLine(text: string | undefined): string | undefined {
 
 function formatPatchErrorResultText(resultText: string | undefined): string {
   if (!resultText?.startsWith("[E_PARTIAL_PATCH]")) {
-    return firstLine(resultText) ?? "Patch failed";
+    return firstLine(resultText) ?? "Edit failed";
   }
 
   const lines = resultText.split("\n");

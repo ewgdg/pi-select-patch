@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import piSelectPatch from "../src/index.js";
 
 describe("extension registration", () => {
-  it("uses smart profile by default while hiding read_hash and edit and keeping write", async () => {
+  it("registers selector edit over the built-in edit and keeps only edit active", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
@@ -49,19 +49,19 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["patch"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit"]);
+      expect(registeredToolNames(registeredTools)).not.toContain("patch");
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
-      expect(activeTools).toContain("patch");
-      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
-      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
+      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("patch");
+      expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "smallest set of short selectors",
       );
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toContain("Add File");
-      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterNames(registeredEditTool(registeredTools))).toContain("patch");
       expect(activeTools).toContain("write");
-      expect(activeTools).not.toContain("edit");
       expect(activeTools).not.toContain("selector_read");
       expect(activeTools).not.toContain("selector_patch");
     } finally {
@@ -70,7 +70,7 @@ describe("extension registration", () => {
     }
   });
 
-  it("binds configured tolerant anchor mode into the session patch tool", async () => {
+  it("binds configured tolerant anchor mode into the session edit tool", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousAnchorMode = process.env.PI_SELECT_PATCH_ANCHOR_MODE;
     const agentDir = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
@@ -100,7 +100,7 @@ describe("extension registration", () => {
 
       await sessionStart?.({}, { cwd: process.cwd(), isProjectTrusted: () => false });
 
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain(
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain(
         "tolerant hierarchical resolution",
       );
     } finally {
@@ -141,20 +141,20 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["patch"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
-      expect(activeTools).toContain("patch");
-      expect(activeTools).not.toContain("edit");
-      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
-      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
+      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("patch");
+      expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "smallest set of short selectors",
       );
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Smart Profile");
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("/old");
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("=new");
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("Hunk Match: Smart Profile");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("/old");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("=new");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
+      expect(patchParameterNames(registeredEditTool(registeredTools))).not.toContain("markerless_selector");
     } finally {
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
@@ -192,18 +192,18 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["patch", "read"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit", "read"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
-      expect(activeTools).toContain("patch");
-      expect(activeTools).not.toContain("edit");
-      expect(registeredPatchTool(registeredTools).promptGuidelines).toHaveLength(1);
-      expect(registeredPatchTool(registeredTools).promptGuidelines?.join("\n")).toContain(
+      expect(activeTools).toContain("edit");
+      expect(activeTools).not.toContain("patch");
+      expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
+      expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
         "Hash profile active",
       );
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).toContain("Hunk Match: Hash Profile");
-      expect(patchParameterDescription(registeredPatchTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
-      expect(patchParameterNames(registeredPatchTool(registeredTools))).not.toContain("markerless_selector");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("Hunk Match: Hash Profile");
+      expect(patchParameterDescription(registeredEditTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
+      expect(patchParameterNames(registeredEditTool(registeredTools))).not.toContain("markerless_selector");
     } finally {
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
@@ -225,9 +225,9 @@ function registeredToolNames(tools: RegisteredTool[]): string[] {
   return tools.map((tool) => tool.name);
 }
 
-function registeredPatchTool(tools: RegisteredTool[]): RegisteredTool {
-  const tool = tools.find((candidate) => candidate.name === "patch");
-  if (!tool) throw new Error("patch tool was not registered");
+function registeredEditTool(tools: RegisteredTool[]): RegisteredTool {
+  const tool = tools.find((candidate) => candidate.name === "edit");
+  if (!tool) throw new Error("edit tool was not registered");
   return tool;
 }
 
