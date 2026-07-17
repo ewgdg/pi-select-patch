@@ -362,6 +362,8 @@ export function createPatchTool(profile: SelectorPatchProfile, anchorMode: Ancho
   return defineTool({
     name: "edit",
     label: "Select Edit",
+    // Built-in edit uses a self-rendered shell; keep Pi's standard status background.
+    renderShell: "default",
     description:
       "Token-efficient tool for editing files with multi-file-capable selector edits.",
     promptSnippet:
