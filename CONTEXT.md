@@ -20,3 +20,12 @@ A candidate's relationship to its line anchor, ordered as contained, overlapping
 **Tolerated match**:
 A hunk match applied by tolerant anchor mode despite not being fully contained by its line anchor. Its use is reported as a warning.
 _Avoid_: Retry match, fallback match, out-of-bound match
+
+**Replace tool**:
+A top-level editing operation for substituting literal text in one file without expressing complete replacement lines.
+
+**Literal replacement match**:
+A case-sensitive match over decoded text after line endings are canonicalized. It performs no trimming, dedenting, fuzzy matching, or Unicode normalization; the file BOM is outside the searchable text.
+
+**Replacement occurrence**:
+A left-to-right, non-overlapping literal replacement match. Searching resumes after the full matched text.
