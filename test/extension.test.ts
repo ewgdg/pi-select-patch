@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import piSelectPatch from "../src/index.js";
 
 describe("extension registration", () => {
-  it("registers selector edit over the built-in edit and keeps only edit active", async () => {
+  it("registers literal replace beside selector edit and activates both", async () => {
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
     process.env.PI_CODING_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
@@ -49,11 +49,12 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["edit"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit", "replace"]);
       expect(registeredToolNames(registeredTools)).not.toContain("patch");
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("edit");
+      expect(activeTools).toContain("replace");
       expect(activeTools).not.toContain("patch");
       expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
@@ -61,6 +62,7 @@ describe("extension registration", () => {
       );
       expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("Hunk Match: Smart Profile");
       expect(patchParameterNames(registeredEditTool(registeredTools))).toContain("patch");
+      expectReplaceContract(registeredReplaceTool(registeredTools));
       expect(activeTools).toContain("write");
       expect(activeTools).not.toContain("selector_read");
       expect(activeTools).not.toContain("selector_patch");
@@ -141,10 +143,11 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["edit"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit", "replace"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("edit");
+      expect(activeTools).toContain("replace");
       expect(activeTools).not.toContain("patch");
       expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
@@ -192,10 +195,11 @@ describe("extension registration", () => {
         { cwd: process.cwd(), isProjectTrusted: () => false },
       );
 
-      expect(registeredToolNames(registeredTools)).toEqual(["edit", "read"]);
+      expect(registeredToolNames(registeredTools)).toEqual(["edit", "replace", "read"]);
       expect(activeTools).toContain("read");
       expect(activeTools).not.toContain("read_hash");
       expect(activeTools).toContain("edit");
+      expect(activeTools).toContain("replace");
       expect(activeTools).not.toContain("patch");
       expect(registeredEditTool(registeredTools).promptGuidelines).toHaveLength(1);
       expect(registeredEditTool(registeredTools).promptGuidelines?.join("\n")).toContain(
@@ -204,6 +208,39 @@ describe("extension registration", () => {
       expect(patchParameterDescription(registeredEditTool(registeredTools))).toContain("Hunk Match: Hash Profile");
       expect(patchParameterDescription(registeredEditTool(registeredTools))).not.toMatch(/\bmarker(?:less)?\b/i);
       expect(patchParameterNames(registeredEditTool(registeredTools))).not.toContain("markerless_selector");
+    } finally {
+      restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
+    }
+  });
+
+  it("registers the same replace contract under the explicit profile", async () => {
+    const previousProfile = process.env.PI_SELECT_PATCH_PROFILE;
+    process.env.PI_SELECT_PATCH_PROFILE = "explicit";
+    try {
+      const registeredTools: RegisteredTool[] = [];
+      let sessionStart:
+        ((event: unknown, ctx: unknown) => Promise<void> | void) | undefined;
+      let activeTools = ["read", "edit", "write"];
+
+      piSelectPatch({
+        registerTool(tool: RegisteredTool) {
+          registeredTools.push(tool);
+        },
+        on(event: string, handler: (event: unknown, ctx: unknown) => Promise<void> | void) {
+          if (event === "session_start") sessionStart = handler;
+        },
+        getActiveTools() {
+          return activeTools;
+        },
+        setActiveTools(nextTools: string[]) {
+          activeTools = nextTools;
+        },
+      } as never);
+
+      await sessionStart?.({}, { cwd: process.cwd(), isProjectTrusted: () => false });
+
+      expect(activeTools).toContain("replace");
+      expectReplaceContract(registeredReplaceTool(registeredTools));
     } finally {
       restoreEnv("PI_SELECT_PATCH_PROFILE", previousProfile);
     }
@@ -217,6 +254,8 @@ function restoreEnv(name: string, value: string | undefined): void {
 
 interface RegisteredTool {
   name: string;
+  description?: string;
+  promptSnippet?: string;
   promptGuidelines?: string[];
   parameters?: unknown;
 }
@@ -229,6 +268,31 @@ function registeredEditTool(tools: RegisteredTool[]): RegisteredTool {
   const tool = tools.find((candidate) => candidate.name === "edit");
   if (!tool) throw new Error("edit tool was not registered");
   return tool;
+}
+
+function registeredReplaceTool(tools: RegisteredTool[]): RegisteredTool {
+  const tool = tools.find((candidate) => candidate.name === "replace");
+  if (!tool) throw new Error("replace tool was not registered");
+  return tool;
+}
+
+function expectReplaceContract(tool: RegisteredTool): void {
+  expect(tool.description).toBe("Replace exact literal text in one file.");
+  expect(tool.promptSnippet).toBe("Replace exact literal text in one file.");
+  const parameters = tool.parameters as {
+    additionalProperties?: boolean;
+    required?: string[];
+    properties: Record<string, { default?: unknown }>;
+  };
+  expect(Object.keys(parameters.properties)).toEqual([
+    "file_path",
+    "old_string",
+    "new_string",
+    "replace_all",
+  ]);
+  expect(parameters.required).toEqual(["file_path", "old_string", "new_string"]);
+  expect(parameters.additionalProperties).toBe(false);
+  expect(parameters.properties.replace_all?.default).toBe(false);
 }
 
 function patchParameterDescription(tool: RegisteredTool): string {

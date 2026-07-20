@@ -1,6 +1,6 @@
 # pi-select-patch
 
-Pi extension for token-efficient file edits using various efficient selectors.
+Pi extension for exact literal replacements and token-efficient selector edits.
 
 File edits by coding agents often spend more tokens repeating unchanged code than describing the change. `pi-select-patch` exists to cut that waste.
 
@@ -100,7 +100,28 @@ One call can update several files. File sections run in authored order.
 +new expectation
 ```
 
+## `replace`
+
+Use `replace` for exact literal substitution in one existing UTF-8 text file. It is separate from selector editing and has a model-familiar shape:
+
+```ts
+{
+  file_path: string;
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+}
+```
+
+Matching is case-sensitive and exact. Replace does not trim, dedent, fuzzy-match, or normalize Unicode. Line endings are canonicalized for matching, so LF, CRLF, and standalone CR inputs can describe the same logical text. The file's initial UTF-8 BOM is preserved and excluded from matching.
+
+By default, `old_string` must occur exactly once. Zero occurrences fail with reread guidance; multiple occurrences fail with the count and ask for more unchanged context. Set `replace_all: true` only when every non-overlapping occurrence should change. An empty `new_string` deletes the matched text.
+
+Replace serializes same-file mutations through Pi's process-local file mutation queue, including symlink aliases. Publication is a direct whole-file write, not an atomic rename; external concurrent writers are unsupported, and a write failure can leave the file partial or truncated.
+
 ## `edit`
+
+Use `edit` for selector-based line changes, sparse ranges, and multi-file patches.
 
 Provide exactly one of `patch` or `patch_file`. Patch files and target file paths resolve from tool working directory.
 

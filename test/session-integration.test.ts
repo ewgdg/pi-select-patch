@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("Pi session integration", () => {
-  it("resolves selector edit when the session allowlist contains only edit", async () => {
+  it("resolves literal replace beside selector edit in a live session", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-select-patch-session-"));
     const agentDir = await mkdtemp(join(tmpdir(), "pi-select-patch-agent-"));
     process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -39,7 +39,7 @@ describe("Pi session integration", () => {
     const { session } = await createAgentSession({
       cwd,
       agentDir,
-      tools: ["edit"],
+      tools: ["edit", "replace"],
       resourceLoader,
       sessionManager: SessionManager.inMemory(cwd),
     });
@@ -47,11 +47,11 @@ describe("Pi session integration", () => {
     try {
       await session.bindExtensions({ mode: "print" });
 
-      expect(session.getActiveToolNames()).toEqual(["edit"]);
+      expect(session.getActiveToolNames()).toEqual(["edit", "replace"]);
       expect(session.getActiveToolNames()).not.toContain("patch");
 
       const allTools = session.getAllTools();
-      expect(allTools.map((tool) => tool.name)).toEqual(["edit"]);
+      expect(allTools.map((tool) => tool.name)).toEqual(["edit", "replace"]);
       expect(allTools).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "patch" })]));
 
       const editTool = session.getToolDefinition("edit");
@@ -61,6 +61,19 @@ describe("Pi session integration", () => {
           patch: expect.any(Object),
           patch_file: expect.any(Object),
         }),
+      });
+
+      const replaceTool = session.getToolDefinition("replace");
+      expect(replaceTool?.description).toBe("Replace exact literal text in one file.");
+      expect(replaceTool?.parameters).toMatchObject({
+        additionalProperties: false,
+        required: ["file_path", "old_string", "new_string"],
+        properties: {
+          file_path: expect.any(Object),
+          old_string: expect.any(Object),
+          new_string: expect.any(Object),
+          replace_all: expect.objectContaining({ default: false }),
+        },
       });
     } finally {
       session.dispose();

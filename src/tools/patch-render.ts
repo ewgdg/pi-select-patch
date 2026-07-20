@@ -1,6 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type PatchSizeComparison } from "../patch-size.js";
 import { type SelectorEfficiency } from "../selector-efficiency.js";
+import { firstLine, isRecord } from "../value.js";
 
 export const COLLAPSED_RESULT_DIFF_MAX_LINES = 16;
 export const EXPANDED_RESULT_DIFF_MAX_LINES = 200;
@@ -437,10 +438,6 @@ function splitInputLines(text: string): string[] {
   return lines;
 }
 
-function firstLine(text: string | undefined): string | undefined {
-  return text?.split("\n", 1)[0];
-}
-
 function formatPatchErrorResultText(resultText: string | undefined): string {
   if (!resultText?.startsWith("[E_PARTIAL_PATCH]")) {
     return firstLine(resultText) ?? "Edit failed";
@@ -459,10 +456,6 @@ function extractPatchErrorSection(lines: readonly string[], startMarker: string,
   }
   const endIndex = lines.findIndex((line, index) => index > startIndex && endMarkers.includes(line));
   return lines.slice(startIndex, endIndex === -1 ? undefined : endIndex).join("\n");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

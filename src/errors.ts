@@ -66,6 +66,30 @@ export class FileTextError extends HashlinePatchError {
   }
 }
 
+export class InvalidReplaceError extends HashlinePatchError {
+  constructor(message: string) {
+    super("[E_INVALID_REPLACE]", message);
+  }
+}
+
+export class ReplaceNotFoundError extends HashlinePatchError {
+  constructor(message: string) {
+    super("[E_REPLACE_NOT_FOUND]", message);
+  }
+}
+
+export class ReplaceAmbiguousError extends HashlinePatchError {
+  constructor(message: string) {
+    super("[E_REPLACE_AMBIGUOUS]", message);
+  }
+}
+
+export class ReplaceWriteError extends HashlinePatchError {
+  constructor(message: string) {
+    super("[E_REPLACE_WRITE]", message);
+  }
+}
+
 export class PartialPatchError extends HashlinePatchError {
   constructor(message: string) {
     super("[E_PARTIAL_PATCH]", message);

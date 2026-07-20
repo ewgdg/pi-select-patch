@@ -12,7 +12,11 @@ export interface ReadTextFileResult {
 
 export interface ReadTextFileOptions {
   writable?: boolean;
+  displayPath?: string;
 }
+
+const MAX_TEXT_FILE_ERROR_PATH_CHARACTERS = 240;
+const TEXT_FILE_ERROR_PATH_OMISSION_MARKER = "...";
 
 export function resolveToolPath(cwd: string, inputPath: string): string {
   return resolve(cwd, inputPath.replace(/^@/, ""));
@@ -23,7 +27,7 @@ export async function resolveExistingRealPath(cwd: string, inputPath: string): P
   try {
     return await realpath(absolutePath);
   } catch (error) {
-    throw new FileTextError(`File not found: ${inputPath}`);
+    throw createTextFilePathResolutionError(inputPath, error);
   }
 }
 
@@ -37,31 +41,75 @@ export async function resolveNewTextFileTarget(cwd: string, inputPath: string): 
 }
 
 export async function readExistingTextFile(path: string, options: ReadTextFileOptions = {}): Promise<ReadTextFileResult> {
-  const realTargetPath = await realpath(path).catch(() => {
-    throw new FileTextError(`File not found: ${path}`);
+  const rawDisplayPath = options.displayPath ?? path;
+  const displayPath = formatTextFileErrorPath(rawDisplayPath);
+  const realTargetPath = await realpath(path).catch((error: unknown) => {
+    throw createTextFilePathResolutionError(rawDisplayPath, error);
   });
 
-  const stats = await stat(realTargetPath);
+  const stats = await stat(realTargetPath).catch((error: unknown) => {
+    throw fileOperationError("inspect", displayPath, error);
+  });
   if (!stats.isFile()) {
-    throw new FileTextError(`Path is not a regular text file: ${path}`);
+    throw new FileTextError(`Path is not a regular text file: ${displayPath}`);
   }
 
   const mode = options.writable ? constants.R_OK | constants.W_OK : constants.R_OK;
   await access(realTargetPath, mode).catch(() => {
-    throw new FileTextError(options.writable ? `File is not readable and writable: ${path}` : `File is not readable: ${path}`);
+    throw new FileTextError(options.writable ? `File is not readable and writable: ${displayPath}` : `File is not readable: ${displayPath}`);
   });
 
-  const buffer = await readFile(realTargetPath);
+  const buffer = await readFile(realTargetPath).catch((error: unknown) => {
+    throw fileOperationError("read", displayPath, error);
+  });
   if (buffer.includes(0)) {
-    throw new FileTextError(`Binary file rejected because it contains NUL bytes: ${path}`);
+    throw new FileTextError(`Binary file rejected because it contains NUL bytes: ${displayPath}`);
   }
 
   try {
     const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
     return { path: realTargetPath, text: decoder.decode(buffer) };
   } catch (error) {
-    throw new FileTextError(`Invalid UTF-8 text file: ${path}`);
+    throw new FileTextError(`Invalid UTF-8 text file: ${displayPath}`);
   }
+}
+
+export function createTextFilePathResolutionError(displayPath: string, error: unknown): FileTextError {
+  const boundedDisplayPath = formatTextFileErrorPath(displayPath);
+  const code = filesystemErrorCode(error);
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return new FileTextError(`File not found: ${boundedDisplayPath}`);
+  }
+  if (code === "EACCES" || code === "EPERM") {
+    return new FileTextError(`File is inaccessible: ${boundedDisplayPath}`);
+  }
+  return new FileTextError(`Could not resolve text file: ${boundedDisplayPath} (${code ?? "filesystem error"})`);
+}
+
+function fileOperationError(operation: "inspect" | "read", displayPath: string, error: unknown): FileTextError {
+  const code = filesystemErrorCode(error);
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return new FileTextError(`File not found: ${displayPath}`);
+  }
+  if (code === "EACCES" || code === "EPERM") {
+    return new FileTextError(`File is inaccessible: ${displayPath}`);
+  }
+  return new FileTextError(`Could not ${operation} text file: ${displayPath} (${code ?? "filesystem error"})`);
+}
+
+function filesystemErrorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function formatTextFileErrorPath(path: string): string {
+  const singleLinePath = path.replace(/\r/g, "\\r").replace(/\n/g, "\\n");
+  if (singleLinePath.length <= MAX_TEXT_FILE_ERROR_PATH_CHARACTERS) {
+    return singleLinePath;
+  }
+  const omittedCharacterCount = singleLinePath.length - MAX_TEXT_FILE_ERROR_PATH_CHARACTERS;
+  return `${singleLinePath.slice(0, MAX_TEXT_FILE_ERROR_PATH_CHARACTERS)}${TEXT_FILE_ERROR_PATH_OMISSION_MARKER} ${omittedCharacterCount} chars omitted`;
 }
 
 export async function writeTextFileAtomically(path: string, text: string): Promise<void> {
