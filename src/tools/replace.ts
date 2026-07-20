@@ -126,6 +126,7 @@ export function createReplaceTool(options: ReplaceToolOptions = {}) {
     renderCall(_args, theme, context) {
       return new Text(buildReplaceCallRenderText({
         input: context.args,
+        argsComplete: context.argsComplete,
         expanded: context.expanded,
         theme,
       }), 0, 0);

@@ -29,6 +29,7 @@ describe("replace renderer", () => {
         old_string: "old\ntext",
         new_string: "new\ntext",
       },
+      argsComplete: false,
       expanded: false,
       theme,
     });
@@ -40,7 +41,7 @@ describe("replace renderer", () => {
     expect(rendered).toContain("<toolDiffContext>new</toolDiffContext>");
   });
 
-  it("keeps the input preview after arguments complete and shows broad intent only when enabled", () => {
+  it("shows broad replacement intent only when enabled while arguments stream", () => {
     const enabled = buildReplaceCallRenderText({
       input: {
         file_path: "file.txt",
@@ -48,6 +49,7 @@ describe("replace renderer", () => {
         new_string: "",
         replace_all: true,
       },
+      argsComplete: false,
       expanded: false,
       theme,
     });
@@ -58,6 +60,7 @@ describe("replace renderer", () => {
         new_string: "new",
         replace_all: false,
       },
+      argsComplete: false,
       expanded: false,
       theme,
     });
@@ -95,6 +98,7 @@ describe("replace renderer", () => {
   it("renders progress without discarding the call preview", () => {
     const call = buildReplaceCallRenderText({
       input: { file_path: "file.txt", old_string: "old", new_string: "new" },
+      argsComplete: false,
       expanded: false,
       theme,
     });
@@ -184,5 +188,36 @@ describe("replace renderer", () => {
     );
 
     expect(component.render(120).join("\n")).toContain("\u001b[48;");
+  });
+
+  it("shows completed replacements as a patch without old and new argument previews", () => {
+    initTheme("dark", false);
+    const replaceTool = createReplaceTool();
+    const component = new ToolExecutionComponent(
+      "replace",
+      "tool-call",
+      {
+        file_path: "file.txt",
+        old_string: "OLD_ARGUMENT_PREVIEW",
+        new_string: "NEW_ARGUMENT_PREVIEW",
+      },
+      undefined,
+      replaceTool as never,
+      { requestRender() {} } as never,
+      process.cwd(),
+    );
+
+    component.setArgsComplete();
+    component.updateResult({
+      content: [{ type: "text", text: "Replaced 1 occurrence." }],
+      details: { diff: "-OLD_ARGUMENT_PREVIEW\n+NEW_ARGUMENT_PREVIEW", occurrenceCount: 1 },
+      isError: false,
+    });
+
+    const rendered = component.render(120).join("\n");
+    expect(rendered).not.toContain("old_string:");
+    expect(rendered).not.toContain("new_string:");
+    expect(rendered).toContain("-OLD_ARGUMENT_PREVIEW");
+    expect(rendered).toContain("+NEW_ARGUMENT_PREVIEW");
   });
 });

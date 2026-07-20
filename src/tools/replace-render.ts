@@ -22,13 +22,16 @@ interface ReplaceRenderInput {
 
 export function buildReplaceCallRenderText(options: {
   input: unknown;
+  argsComplete: boolean;
   expanded: boolean;
   theme: ReplaceRenderTheme;
 }): string {
-  const { input, expanded, theme } = options;
+  const { input, argsComplete, expanded, theme } = options;
   const args = isRecord(input) ? input as ReplaceRenderInput : undefined;
   const path = typeof args?.file_path === "string" ? args.file_path : "";
   const header = [theme.fg("toolTitle", "replace"), path].filter(Boolean).join(" ");
+  if (argsComplete) return header;
+
   const preview = formatReplaceInputPreview(input, expanded, theme);
 
   if (preview) return `${header}\n${preview}`;
