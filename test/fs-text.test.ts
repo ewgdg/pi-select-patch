@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,7 +6,6 @@ import {
   FileTextError,
   hashLine,
   readExistingTextFile,
-  writeTextFileAtomically,
 } from "../src/api.js";
 import { createPatchTool } from "../src/tools/selector-patch.js";
 
@@ -43,16 +42,6 @@ describe("text file IO", () => {
     });
   });
 
-  it("atomically writes through symlinks to update target content", async () => {
-    const dir = await makeTempDir();
-    const target = join(dir, "target.txt");
-    const link = join(dir, "link.txt");
-    await writeFile(target, "old");
-    await symlink(target, link);
-
-    await writeTextFileAtomically(link, "new");
-    await expect(readFile(target, "utf8")).resolves.toBe("new");
-  });
 });
 
 describe("edit tool", () => {

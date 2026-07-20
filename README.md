@@ -117,7 +117,7 @@ Matching is case-sensitive and exact. Replace does not trim, dedent, fuzzy-match
 
 By default, `old_string` must occur exactly once. Zero occurrences fail with reread guidance; multiple occurrences fail with the count and ask for more unchanged context. Set `replace_all: true` only when every non-overlapping occurrence should change. An empty `new_string` deletes the matched text.
 
-Replace serializes same-file mutations through Pi's process-local file mutation queue, including symlink aliases. Publication is a direct whole-file write, not an atomic rename; external concurrent writers are unsupported, and a write failure can leave the file partial or truncated.
+Replace serializes same-file mutations through Pi's process-local file mutation queue, including symlink aliases. It uses the shared internal text-file publication backend described below.
 
 ## `edit`
 
@@ -155,6 +155,10 @@ Zero matches mean patch is stale. Multiple equally valid matches mean patch is a
 File operations apply sequentially. If a later operation fails, earlier successful operations remain applied and later operations are skipped. Error includes a retry patch containing failed and skipped operations, avoiding need to resend whole original patch.
 
 Dry runs validate and return normal receipt shape without writing.
+
+`edit` and `replace` publish complete text through the same internal default backend. Existing files are opened and direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where the platform exposes them. New files are direct-created exclusively so publication never overwrites an existing target. Publication does not use temporary files, hard-link publication, or rename publication, and replacing an existing file does not require write permission on its parent directory.
+
+Publication is not atomic. A failed existing-file write may leave the target partially written or truncated; reread the file before retrying. The backend is internal and has no tool parameter, setting, or environment-variable selector.
 
 ## Pi integration
 

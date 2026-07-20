@@ -34,9 +34,11 @@ import {
   resolveExistingRealPath,
   resolveToolPath,
   resolveNewTextFileTarget,
-  writeNewTextFileAtomically,
-  writeTextFileAtomically,
 } from "../fs-text.js";
+import {
+  directTextFilePublicationBackend,
+  type TextFilePublicationBackend,
+} from "../text-file-publication.js";
 import { type SelectorEfficiency } from "../selector-efficiency.js";
 import { type PatchSizeComparison } from "../patch-size.js";
 import {
@@ -349,6 +351,10 @@ interface PatchProfileDefaults {
   receipt: PatchReceiptMode;
 }
 
+export interface PatchToolOptions {
+  publicationBackend?: TextFilePublicationBackend;
+}
+
 const PATCH_PROFILE_DEFAULTS: Record<
   SelectorPatchProfile,
   PatchProfileDefaults
@@ -358,7 +364,12 @@ const PATCH_PROFILE_DEFAULTS: Record<
   hash: { receipt: "hash" },
 };
 
-export function createPatchTool(profile: SelectorPatchProfile, anchorMode: AnchorMode = "strict") {
+export function createPatchTool(
+  profile: SelectorPatchProfile,
+  anchorMode: AnchorMode = "strict",
+  options: PatchToolOptions = {},
+) {
+  const publicationBackend = options.publicationBackend ?? directTextFilePublicationBackend;
   return defineTool({
     name: "edit",
     label: "Select Edit",
@@ -403,7 +414,12 @@ export function createPatchTool(profile: SelectorPatchProfile, anchorMode: Ancho
       }
 
       try {
-        const change = await applyOperationSequentially(ctx.cwd, operation, anchorMode);
+        const change = await applyOperationSequentially(
+          ctx.cwd,
+          operation,
+          anchorMode,
+          publicationBackend,
+        );
         plannedChanges.push(change);
       } catch (error) {
         const retryPatch = await tryWriteRetryPatch(
@@ -587,11 +603,12 @@ async function applyOperationSequentially(
   cwd: string,
   operation: UniversalPatchOperation,
   anchorMode: AnchorMode,
+  publicationBackend: TextFilePublicationBackend,
 ): Promise<PlannedFileChange> {
   const operationTarget = await prepareOperationTarget(cwd, operation);
   return withFileMutationQueue(operationTarget.targetPath, async () => {
     const change = await planFileChange(operationTarget, anchorMode);
-    await writePlannedChange(change);
+    await publishPlannedChange(change, publicationBackend);
     return change;
   });
 }
@@ -918,11 +935,14 @@ async function planFileChange(
   };
 }
 
-async function writePlannedChange(change: PlannedFileChange): Promise<void> {
+async function publishPlannedChange(
+  change: PlannedFileChange,
+  publicationBackend: TextFilePublicationBackend,
+): Promise<void> {
   if (change.operation === "add") {
-    await writeNewTextFileAtomically(change.targetPath, change.newText ?? "");
+    await publicationBackend.createNew(change.targetPath, change.newText ?? "");
   } else if (change.operation === "update") {
-    await writeTextFileAtomically(change.targetPath, change.newText ?? "");
+    await publicationBackend.replaceExisting(change.targetPath, change.newText ?? "");
   }
 }
 

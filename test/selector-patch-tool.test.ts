@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hashLine, parseText } from "../src/api.js";
+import { directTextFilePublicationBackend } from "../src/text-file-publication.js";
 import { createPatchTool } from "../src/tools/selector-patch.js";
 
 const smartPatchTool = createPatchTool("smart");
@@ -133,6 +134,82 @@ async function patchFile(initialText: string, diff: string, path = "file.txt") {
   );
   return { dir, file, result };
 }
+
+describe("edit publication backend", () => {
+  it("routes update and add publication through an injected backend", async () => {
+    const dir = await makePlainTempDir();
+    await writeFile(join(dir, "existing.txt"), "old");
+    const calls: Array<{ operation: "replace" | "create"; path: string; text: string }> = [];
+    const tool = createPatchTool("smart", "strict", {
+      publicationBackend: {
+        async replaceExisting(path, completeText) {
+          calls.push({ operation: "replace", path, text: completeText });
+          await directTextFilePublicationBackend.replaceExisting(path, completeText);
+        },
+        async createNew(path, completeText) {
+          calls.push({ operation: "create", path, text: completeText });
+          await directTextFilePublicationBackend.createNew(path, completeText);
+        },
+      },
+    });
+
+    const result = await tool.execute(
+      "tool-call",
+      {
+        patch: [
+          "*** Update File: existing.txt",
+          "@@",
+          "-old",
+          "+new",
+          "*** Add File: added.txt",
+          "+created",
+        ].join("\n"),
+      },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toBe([
+      "*** Update File: existing.txt",
+      "Applied",
+      "*** Add File: added.txt",
+      "Applied",
+    ].join("\n"));
+    expect(calls).toEqual([
+      { operation: "replace", path: join(dir, "existing.txt"), text: "new" },
+      { operation: "create", path: join(dir, "added.txt"), text: "created" },
+    ]);
+    await expect(readFile(join(dir, "existing.txt"), "utf8")).resolves.toBe("new");
+    await expect(readFile(join(dir, "added.txt"), "utf8")).resolves.toBe("created");
+  });
+
+  it("surfaces backend failure after a direct write may have changed the target", async () => {
+    const dir = await makePlainTempDir();
+    const path = join(dir, "file.txt");
+    await writeFile(path, "old");
+    const tool = createPatchTool("smart", "strict", {
+      publicationBackend: {
+        async replaceExisting(realTargetPath, completeText) {
+          await writeFile(realTargetPath, completeText.slice(0, 1));
+          throw new Error("simulated publication failure");
+        },
+        createNew: directTextFilePublicationBackend.createNew,
+      },
+    });
+
+    const message = await rejectionMessage(tool.execute(
+      "tool-call",
+      { patch: ["*** Update File: file.txt", "@@", "-old", "+new"].join("\n") },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    ));
+    expect(message).toContain("[E_PARTIAL_PATCH]");
+    expect(message).toContain("simulated publication failure");
+    await expect(readFile(path, "utf8")).resolves.toBe("n");
+  });
+});
 
 describe("edit visible status", () => {
   it.each([

@@ -4,9 +4,24 @@ import { join } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { Check } from "typebox/value";
 import { describe, expect, it } from "vitest";
+import {
+  directTextFilePublicationBackend,
+  type TextFilePublicationBackend,
+} from "../src/text-file-publication.js";
 import { createReplaceTool } from "../src/tools/replace.js";
 
 const createTempDirectory = () => mkdtemp(join(tmpdir(), "pi-select-patch-replace-"));
+
+function createReplaceToolWithPublisher(
+  replaceExisting: TextFilePublicationBackend["replaceExisting"],
+) {
+  return createReplaceTool({
+    publicationBackend: {
+      ...directTextFilePublicationBackend,
+      replaceExisting,
+    },
+  });
+}
 
 async function executeReplace(
   cwd: string,
@@ -433,11 +448,9 @@ describe("replace target and publication failures", () => {
     const cwd = await createTempDirectory();
     const path = join(cwd, "file.txt");
     await writeFile(path, "old");
-    const tool = createReplaceTool({
-      async publishCompleteText(realTargetPath, text) {
-        await writeFile(realTargetPath, text.slice(0, 1));
-        throw new Error("simulated write failure\nextra diagnostics");
-      },
+    const tool = createReplaceToolWithPublisher(async (realTargetPath, text) => {
+      await writeFile(realTargetPath, text.slice(0, 1));
+      throw new Error("simulated write failure\nextra diagnostics");
     });
 
     await expect(executeReplace(cwd, {
@@ -471,10 +484,8 @@ describe("replace cancellation and mutation queue", () => {
     const controller = new AbortController();
     controller.abort();
     let published = false;
-    const tool = createReplaceTool({
-      async publishCompleteText() {
-        published = true;
-      },
+    const tool = createReplaceToolWithPublisher(async () => {
+      published = true;
     });
 
     await expect(executeReplace(cwd, {
@@ -501,10 +512,8 @@ describe("replace cancellation and mutation queue", () => {
     await queueAcquired;
 
     let published = false;
-    const tool = createReplaceTool({
-      async publishCompleteText() {
-        published = true;
-      },
+    const tool = createReplaceToolWithPublisher(async () => {
+      published = true;
     });
     const controller = new AbortController();
     const execution = executeReplace(cwd, {
@@ -527,10 +536,8 @@ describe("replace cancellation and mutation queue", () => {
     await writeFile(path, "old");
     const controller = new AbortController();
     let published = false;
-    const tool = createReplaceTool({
-      async publishCompleteText() {
-        published = true;
-      },
+    const tool = createReplaceToolWithPublisher(async () => {
+      published = true;
     });
 
     const execution = tool.execute(
@@ -554,12 +561,10 @@ describe("replace cancellation and mutation queue", () => {
     const started = new Promise<void>((resolve) => { publicationStarted = resolve; });
     let finishPublication!: () => void;
     const finish = new Promise<void>((resolve) => { finishPublication = resolve; });
-    const tool = createReplaceTool({
-      async publishCompleteText(realTargetPath, text) {
-        publicationStarted();
-        await finish;
-        await writeFile(realTargetPath, text);
-      },
+    const tool = createReplaceToolWithPublisher(async (realTargetPath, text) => {
+      publicationStarted();
+      await finish;
+      await writeFile(realTargetPath, text);
     });
     const controller = new AbortController();
     const execution = executeReplace(cwd, {
@@ -590,15 +595,13 @@ describe("replace cancellation and mutation queue", () => {
     let releaseFirst!: () => void;
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
     let publicationCount = 0;
-    const tool = createReplaceTool({
-      async publishCompleteText(realTargetPath, text) {
-        publicationCount += 1;
-        if (publicationCount === 1) {
-          firstPublicationStarted();
-          await firstGate;
-        }
-        await writeFile(realTargetPath, text);
-      },
+    const tool = createReplaceToolWithPublisher(async (realTargetPath, text) => {
+      publicationCount += 1;
+      if (publicationCount === 1) {
+        firstPublicationStarted();
+        await firstGate;
+      }
+      await writeFile(realTargetPath, text);
     });
 
     const first = executeReplace(cwd, {

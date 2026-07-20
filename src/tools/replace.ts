@@ -1,4 +1,3 @@
-import { writeFile } from "node:fs/promises";
 import {
   defineTool,
   generateUnifiedPatch,
@@ -17,6 +16,10 @@ import {
   readExistingTextFile,
   resolveExistingRealPath,
 } from "../fs-text.js";
+import {
+  directTextFilePublicationBackend,
+  type TextFilePublicationBackend,
+} from "../text-file-publication.js";
 import {
   buildReplaceCallRenderText,
   buildReplaceResultRenderText,
@@ -46,7 +49,7 @@ export interface ReplaceToolDetails {
 }
 
 export interface ReplaceToolOptions {
-  publishCompleteText?: (realTargetPath: string, text: string) => Promise<void>;
+  publicationBackend?: TextFilePublicationBackend;
 }
 
 interface ReplacementPlan {
@@ -59,7 +62,7 @@ const MAX_WRITE_ERROR_CAUSE_CHARACTERS = 300;
 const WRITE_ERROR_OMISSION_MARKER = "...";
 
 export function createReplaceTool(options: ReplaceToolOptions = {}) {
-  const publishCompleteText = options.publishCompleteText ?? publishDirectly;
+  const publicationBackend = options.publicationBackend ?? directTextFilePublicationBackend;
 
   return defineTool({
     name: "replace",
@@ -93,7 +96,7 @@ export function createReplaceTool(options: ReplaceToolOptions = {}) {
           });
           throwIfCancelled(signal);
           try {
-            await publishCompleteText(target.path, plan.serializedResult);
+            await publicationBackend.replaceExisting(target.path, plan.serializedResult);
           } catch (error) {
             throw new ReplaceWriteError(
               `${boundedErrorCause(error)}. The file may be partially written or truncated. Reread it before retrying.`,
@@ -255,10 +258,6 @@ function canonicalizeNewlines(text: string): string {
 function detectOutputNewline(text: string): "\n" | "\r\n" {
   const firstNewline = text.match(/\r\n|\n|\r/)?.[0];
   return firstNewline === "\r\n" ? "\r\n" : "\n";
-}
-
-async function publishDirectly(realTargetPath: string, text: string): Promise<void> {
-  await writeFile(realTargetPath, text, "utf8");
 }
 
 function throwIfCancelled(signal: AbortSignal | undefined): void {

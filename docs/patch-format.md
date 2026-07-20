@@ -59,6 +59,8 @@ Use the built-in `write` tool for new files. `*** Delete File: path` is rejected
 
 Multiple operations may target the same path. File operations apply sequentially: earlier successful operations stay applied if a later non-dry operation fails, and later operations are skipped. During non-dry apply failures, the tool writes a retry patch by copying the authored failed operation plus skipped later operations, then includes its path in the error message. Parser failures write the raw malformed input as the retry patch so agents can fix it via `patch_file` without re-emitting the full patch. `dry_run: true` validates the full patch without writing.
 
+File publication uses an internal direct-write backend shared with `replace`. Existing files are direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where supported. New files are direct-created exclusively and never overwrite an existing target. The default backend does not publish through temporary files, hard links, or renames, and existing-file replacement does not require write permission on the parent directory. Publication is not atomic: a failed write may leave an existing target partially written or truncated, so reread it before retrying. Backend selection is not exposed through tool input or configuration.
+
 Patch calls can set `receipt`. `profile` is configuration, not a patch parameter.
 
 - configured `profile: "explicit"` — context/delete rows use explicit selector markers or exact unified-diff fallback; status receipt.
