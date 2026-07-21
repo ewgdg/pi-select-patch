@@ -1431,6 +1431,30 @@ describe("edit visible status", () => {
     );
   });
 
+  it("leaves a file unchanged when conflicting hunks reject its update section", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "start\nmiddle\nend");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: file.txt",
+      "@@",
+      " :start",
+      " ...",
+      " :end",
+      "+after-end",
+      "@@",
+      " :middle",
+      "+after-middle",
+      "*** End Patch",
+    ].join("\n");
+
+    await expect(
+      explicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    ).rejects.toThrow("[E_CONFLICTING_HUNKS]");
+    await expect(readFile(file, "utf8")).resolves.toBe("start\nmiddle\nend");
+  });
+
   it("accepts patch_file instead of inline patch", async () => {
     const dir = await makeTempDir();
     await writeFile(join(dir, "one.txt"), "old");

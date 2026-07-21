@@ -569,6 +569,69 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText("x\nx\nx", multi)).toThrow(ConflictingHunksError);
   });
 
+  it("allows adjacent complete source spans", () => {
+    const multi = [
+      "@@", " :first", "-:second", "+replacement-second",
+      "@@", " :third", "-:fourth", "+replacement-fourth"
+    ].join("\n");
+
+    expect(applyPatchToText("first\nsecond\nthird\nfourth", multi).text).toBe(
+      "first\nreplacement-second\nthird\nreplacement-fourth"
+    );
+  });
+
+  it("rejects a hunk nested in a preserved sparse source span", () => {
+    const multi = [
+      "@@", " :start", " ...", " :end", "+after-end",
+      "@@", " :middle", "+after-middle"
+    ].join("\n");
+
+    expect(() => applyPatchToText("start\nmiddle\nend", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it("rejects a hunk nested in a deleted sparse source span", () => {
+    const multi = [
+      "@@", "-:start", "-...", "-:end", "+replacement",
+      "@@", " :middle", "+after-middle"
+    ].join("\n");
+
+    expect(() => applyPatchToText("start\nmiddle\nend", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it.each([
+    { kind: "preserved", sparseOps: [" :start", " ...", " :end", "+after-end"], anchor: "start" },
+    { kind: "preserved", sparseOps: [" :start", " ...", " :end", "+after-end"], anchor: "end" },
+    { kind: "deleted", sparseOps: ["-:start", "-...", "-:end", "+replacement"], anchor: "start" },
+    { kind: "deleted", sparseOps: ["-:start", "-...", "-:end", "+replacement"], anchor: "end" }
+  ])("rejects reuse of a $kind sparse range's $anchor anchor", ({ sparseOps, anchor }) => {
+    const multi = ["@@", ...sparseOps, "@@", ` :${anchor}`, "+after-anchor"].join("\n");
+
+    expect(() => applyPatchToText("start\nmiddle\nend", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it("allows a hunk immediately after a sparse source span", () => {
+    const multi = [
+      "@@", " :start", " ...", " :end", "+after-end",
+      "@@", " :after", "+after-after"
+    ].join("\n");
+
+    expect(applyPatchToText("start\nmiddle\nend\nafter", multi).text).toBe(
+      "start\nmiddle\nend\nafter-end\nafter\nafter-after"
+    );
+  });
+
+  it("filters an ambiguous hunk candidate that overlaps a fixed source span", () => {
+    const multi = [
+      "@@", " :fixed", " :x", "+after-fixed",
+      "@@", "-:x", "-:b", "+replacement"
+    ].join("\n");
+
+    const result = applyPatchToText("fixed\nx\nb\nx\nb", multi);
+
+    expect(result.text).toBe("fixed\nx\nafter-fixed\nb\nreplacement");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 3]);
+  });
+
   it("bounds ambiguity-group assignment search without retaining a Cartesian product", () => {
     const multi = Array.from({ length: 7 }, (_value, index) => ["@@", "-:x", `+replacement-${index}`].join("\n")).join("\n");
 
@@ -725,6 +788,12 @@ describe("applyPatchToText", () => {
     const result = applyPatchToText("", patch(row("+", "first"), row("+", "second")));
     expect(result.text).toBe("first\nsecond");
     expect(() => applyPatchToText("already", patch(row("+", "extra")))).toThrow(UnsupportedHunkError);
+  });
+
+  it("rejects multiple pure-insertion hunks for an empty file", () => {
+    const multi = ["@@", "+first", "@@", "+second"].join("\n");
+
+    expect(() => applyPatchToText("", multi)).toThrow(UnsupportedHunkError);
   });
 
   it("deletes entire and single-line files", () => {
