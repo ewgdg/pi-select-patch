@@ -1128,6 +1128,32 @@ describe("edit visible status", () => {
     expect(message).not.toContain(longSelector);
   });
 
+  it("leaves a file unchanged when a resolved Update section also contains a stale hunk", async () => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "a.txt");
+    await writeFile(file, "target\nboundary\ntarget");
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: a.txt",
+      "@@",
+      "-:target",
+      "+first",
+      "+inserted",
+      "@@",
+      "-:boundary",
+      "+done",
+      "@@",
+      "-:missing",
+      "+never",
+      "*** End Patch",
+    ].join("\n");
+
+    await expect(
+      smartPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    ).rejects.toThrow("[E_STALE_HUNK]");
+    await expect(readFile(file, "utf8")).resolves.toBe("target\nboundary\ntarget");
+  });
+
   it("omits stale hunk numbers because they are local to each Update section", async () => {
     const dir = await makeTempDir();
     await writeFile(join(dir, "a.txt"), "old");

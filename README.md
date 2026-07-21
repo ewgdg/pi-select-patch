@@ -146,7 +146,7 @@ Hunk headers:
 - `@@ @<line>` and `@@ @<start>...<end>` use strict hard boundaries by default.
 - Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to recover unique overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
 
-Within one file section, later hunks can only match untouched original lines. Use another `*** Update File` section for same path when a later edit must depend on earlier output.
+Each `Update File` section resolves and validates every hunk against one immutable pre-edit source before materializing output. Resolved source spans cannot overlap; hunks materialize in authored order and never match earlier inserted output. Use another `*** Update File` section when a later edit must depend on earlier output.
 
 ## Failure behavior
 

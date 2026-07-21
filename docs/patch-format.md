@@ -106,7 +106,7 @@ Rules:
 - ` ...` preserves every target line between the nearest surrounding context/delete operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context/delete operations. Add `+` lines after it to replace that range. Surrounding delete operations also anchor the sparse range, then delete their matched endpoint lines.
 - Hunks without ellipsis must match exactly one contiguous span in current target file. Hunks with ellipsis must match exactly one sparse span.
-- Within one Update File section, each hunk may match or span only untouched original target lines. Later hunks cannot anchor on or range across inserted lines or target lines already used by earlier hunks in that same section. To make one edit depend on another edit's output, use a later `*** Update File` section for the same path.
+- Within one Update File section, every hunk resolves and validates against the same immutable pre-edit source before any output materializes. Resolved source spans may not overlap. Hunks then materialize in authored order, never matching inserted output; use a later `*** Update File` section when an edit must depend on earlier output.
 - Pure insertion has empty match sequence and is supported only when target file has zero logical lines; hunk anchor hints are rejected on pure insert hunks because there is no resolved match start.
 
 ### Blank line operations

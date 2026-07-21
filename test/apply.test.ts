@@ -427,6 +427,56 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText(text, multi)).toThrow(StaleHunkError);
   });
 
+  it("uses a later unique hunk as a boundary for an earlier ambiguous fixed hunk", () => {
+    const multi = ["@@", "-:target", "+first", "+inserted", "@@", "-:boundary", "+done"].join("\n");
+
+    const result = applyPatchToText("target\nboundary\ntarget", multi);
+
+    expect(result.text).toBe("first\ninserted\ndone\ntarget");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 1]);
+    expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([0, 1]);
+  });
+
+  it("uses an earlier unique hunk as a boundary for a later ambiguous fixed hunk", () => {
+    const multi = ["@@", "-:boundary", "+done", "+inserted", "@@", "-:target", "+final"].join("\n");
+
+    const result = applyPatchToText("target\nboundary\ntarget", multi);
+
+    expect(result.text).toBe("target\ndone\ninserted\nfinal");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([1, 2]);
+    expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([1, 2]);
+  });
+
+  it("materializes uniquely resolved hunks in authored order despite reverse source order", () => {
+    const multi = ["@@", " :second", "+after-second", "@@", " :first", "+after-first"].join("\n");
+
+    const result = applyPatchToText("first\nsecond", multi);
+
+    expect(result.text).toBe("first\nafter-first\nsecond\nafter-second");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([1, 0]);
+    expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([1, 0]);
+  });
+
+  it("materializes a prior later-line replacement before an earlier source hunk", () => {
+    const multi = ["@@", "-:b", "+x", "@@", " :a", "+y"].join("\n");
+
+    const result = applyPatchToText("a\nb", multi);
+
+    expect(result.text).toBe("a\ny\nx");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([1, 0]);
+    expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([1, 0]);
+  });
+
+  it("preserves prior inserted output beside a later-materialized source span", () => {
+    const multi = ["@@", "+x", " :b", "@@", " :a", "+y"].join("\n");
+
+    const result = applyPatchToText("a\nb", multi);
+
+    expect(result.text).toBe("a\ny\nx\nb");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([1, 0]);
+    expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([1, 0]);
+  });
+
   it("does not let later hunks reuse original lines touched by earlier hunks", () => {
     const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row(" ", "b"), row("+", "y")].join("\n");
 

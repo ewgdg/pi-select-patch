@@ -126,6 +126,7 @@ interface FuzzySubsequenceScore {
 
 interface PatchLineState {
   content: string;
+  sourceIndex?: number;
   // Hunks in one update section are Codex/unified-diff-like: later hunks may only
   // anchor on untouched original target lines, not earlier insertions or reused context.
   availableForHunkMatch: boolean;
@@ -140,13 +141,22 @@ export function applyPatchToText(
   const anchorMode = options.anchorMode ?? "strict";
   const patch = typeof patchInput === "string" ? parsePatch(patchInput, hashFn) : patchInput;
   const model = parseText(text);
-  let currentLines = model.lines.map((content) => ({ content, availableForHunkMatch: true }));
+  const sourceLines = model.lines.map((content, sourceIndex) => ({ content, sourceIndex, availableForHunkMatch: true }));
+  const resolvedHunks = resolveSectionHunks(sourceLines, patch.hunks, hashFn, anchorMode);
+  let currentLines: PatchLineState[] = sourceLines;
   const hunkReceipts: PatchHunkReceipt[] = [];
   const hunkAudits: PatchHunkAudit[] = [];
   const hunkTranscripts: PatchHunkTranscript[] = [];
 
-  for (const [hunkOffset, hunk] of patch.hunks.entries()) {
-    const applied = applyHunk(currentLines, hunk, hunkOffset + 1, hashFn, anchorMode);
+  for (const resolvedHunk of resolvedHunks) {
+    const applied = applyHunk(
+      currentLines,
+      resolvedHunk.hunk,
+      resolvedHunk.hunkIndex,
+      hashFn,
+      resolvedHunk.match ? materializeSourceMatch(resolvedHunk.match, currentLines, sourceLines.length) : undefined,
+      resolvedHunk.match?.match.start
+    );
     currentLines = applied.lines;
     hunkReceipts.push(applied.receipt);
     hunkAudits.push(applied.audit);
@@ -181,7 +191,108 @@ function renderPatchReceiptLine(line: PatchReceiptLine): string {
   return `${line.kind === "insert" ? "+" : " "}${line.hash}`;
 }
 
-function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashFn: HashFunction, anchorMode: AnchorMode): AppliedHunk {
+interface ResolvedSectionHunk {
+  hunk: Hunk;
+  hunkIndex: number;
+  match?: ResolvedHunkMatch;
+}
+
+interface AmbiguousSectionHunk {
+  hunk: Hunk;
+  hunkIndex: number;
+  candidates: SparseMatch[];
+}
+
+function resolveSectionHunks(
+  sourceLines: readonly PatchLineState[],
+  hunks: readonly Hunk[],
+  hashFn: HashFunction,
+  anchorMode: AnchorMode
+): ResolvedSectionHunk[] {
+  const entries = sourceLines.map((line) => ({ content: line.content, hash: hashFn(line.content), availableForHunkMatch: true }));
+  const resolutions: Array<ResolvedSectionHunk | AmbiguousSectionHunk> = [];
+
+  for (const [hunkOffset, hunk] of hunks.entries()) {
+    const hunkIndex = hunkOffset + 1;
+    validateHunkAnchorHint(hunk, hunkIndex);
+    validateNoConflictingSelectors(hunk, hunkIndex);
+    validateReplaceRows(hunk, hunkIndex);
+    const matchPattern = buildMatchPattern(hunk);
+
+    if (matchPattern.length === 0) {
+      if (hunk.anchorHint) {
+        throw new UnsupportedHunkError(`Hunk ${hunkIndex} anchor hint requires at least one context/deletion selector.`, hunkErrorLocation(hunk));
+      }
+      if (sourceLines.length === 0 && hunk.ops.every((op) => op.kind === "insert")) {
+        if (resolutions.some((resolution) => "match" in resolution && resolution.match === undefined)) {
+          throw new UnsupportedHunkError(`Hunk ${hunkIndex} has no context/deletion selectors; pure insertion requires an empty file.`, hunkErrorLocation(hunk));
+        }
+        resolutions.push({ hunk, hunkIndex });
+        continue;
+      }
+      throw new UnsupportedHunkError(`Hunk ${hunkIndex} has no context/deletion selectors; pure insertion requires an empty file.`, hunkErrorLocation(hunk));
+    }
+
+    validateSparseRanges(hunk, hunkIndex);
+    const matchOps = hunk.ops.filter(isMatchOp);
+    if (isOrderAssistableHunk(hunk, anchorMode)) {
+      const candidates = findFixedContiguousHunkCandidates(entries, hunk, matchOps);
+      if (candidates.length > 1) {
+        resolutions.push({ hunk, hunkIndex, candidates });
+        continue;
+      }
+      if (candidates.length === 1) {
+        const match = { match: candidates[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
+        validateResolvedReplaceRows(sourceLines, hunk, hunkIndex, match.match);
+        resolutions.push({ hunk, hunkIndex, match });
+        continue;
+      }
+    }
+
+    const match = resolveHunkMatchOrThrow(entries, hunk, hunkIndex, matchOps, anchorMode);
+    validateResolvedReplaceRows(sourceLines, hunk, hunkIndex, match.match);
+    resolutions.push({ hunk, hunkIndex, match });
+  }
+
+  const ambiguities = resolutions.filter((resolution): resolution is AmbiguousSectionHunk => "candidates" in resolution);
+  if (ambiguities.length > 0) {
+    if (ambiguities.length === 1) {
+      const ambiguous = ambiguities[0];
+      const hunkOffset = ambiguous.hunkIndex - 1;
+      const previous = resolutions[hunkOffset - 1];
+      const next = resolutions[hunkOffset + 1];
+      const previousMatch = previous && "match" in previous ? previous.match?.match : undefined;
+      const nextMatch = next && "match" in next ? next.match?.match : undefined;
+      const candidates = ambiguous.candidates.filter((candidate) =>
+        (previousMatch === undefined || previousMatch.end <= candidate.start) &&
+        (nextMatch === undefined || candidate.end <= nextMatch.start)
+      );
+      if (candidates.length === 1 && (previousMatch !== undefined || nextMatch !== undefined)) {
+        const match = { match: candidates[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
+        validateResolvedReplaceRows(sourceLines, ambiguous.hunk, ambiguous.hunkIndex, match.match);
+        resolutions[hunkOffset] = { hunk: ambiguous.hunk, hunkIndex: ambiguous.hunkIndex, match };
+      }
+    }
+
+    const unresolved = resolutions.find((resolution): resolution is AmbiguousSectionHunk => "candidates" in resolution);
+    if (unresolved) {
+      throw new AmbiguousHunkError(`Hunk matched ${unresolved.candidates.length} spans${renderAnchorSearchScope(unresolved.hunk)}.`, hunkErrorLocation(unresolved.hunk));
+    }
+  }
+
+  const resolved = resolutions as ResolvedSectionHunk[];
+  validateResolvedHunkConflicts(resolved, anchorMode);
+  return resolved;
+}
+
+function applyHunk(
+  lines: PatchLineState[],
+  hunk: Hunk,
+  hunkIndex: number,
+  hashFn: HashFunction,
+  resolvedMatch?: ResolvedHunkMatch,
+  sourceMatchStart?: number
+): AppliedHunk {
   validateHunkAnchorHint(hunk, hunkIndex);
   validateNoConflictingSelectors(hunk, hunkIndex);
   validateReplaceRows(hunk, hunkIndex);
@@ -230,26 +341,7 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   validateSparseRanges(hunk, hunkIndex);
 
   const currentEntries = lines.map((line) => ({ content: line.content, hash: hashFn(line.content), availableForHunkMatch: line.availableForHunkMatch }));
-  const matchOps = hunk.ops.filter(isMatchOp);
-  const resolvedMatch = anchorMode === "tolerant" && hunk.anchorHint
-    ? findTolerantAnchorMatch(currentEntries, hunk, matchOps)
-    : findResolvedHunkMatch(currentEntries, hunk, matchOps, {
-      start: getAnchorSearchStart(hunk),
-      end: getAnchorSearchEnd(hunk)
-    });
-  if (!resolvedMatch) {
-    if (anchorMode === "tolerant" && hunk.anchorHint) {
-      throw new StaleHunkError("Hunk not found in any anchor affinity.", hunkErrorLocation(hunk));
-    }
-    const staleDetail = `Hunk not found${renderAnchorSearchScope(hunk)}.`;
-    const diagnosticMatch = hunk.anchorHint
-      ? findOutsideAnchorDiagnosticMatch(currentEntries, hunk, matchOps)
-      : undefined;
-    if (diagnosticMatch) {
-      throw new StaleHunkError(`${staleDetail} ${renderOutsideAnchorDiagnostic(diagnosticMatch.match)}`, hunkErrorLocation(hunk));
-    }
-    throw new StaleHunkError(staleDetail, hunkErrorLocation(hunk));
-  }
+  if (!resolvedMatch) throw new Error("Internal patch error: missing pre-resolved hunk match.");
 
   const { match } = resolvedMatch;
   const replacement: PatchLineState[] = [];
@@ -355,10 +447,10 @@ function applyHunk(lines: PatchLineState[], hunk: Hunk, hunkIndex: number, hashF
   return {
     lines: [...lines.slice(0, match.start), ...replacement, ...lines.slice(match.end)],
     receipt: { hunkIndex, lines: receiptLines },
-    transcript: { hunkIndex, matchStart: match.start, lines: transcriptLines },
+    transcript: { hunkIndex, matchStart: sourceMatchStart ?? match.start, lines: transcriptLines },
     audit: {
       hunkIndex,
-      matchStart: match.start,
+      matchStart: sourceMatchStart ?? match.start,
       matchPattern,
       matcherKinds: buildMatcherKinds(currentEntries, hunk, match, resolvedMatch.smartMatcherKinds),
       patchCharCount,
@@ -399,7 +491,7 @@ function lineMatchesOp(line: CurrentLineEntry, op: MatchPatchOp): boolean {
 }
 
 function markLineTouched(line: PatchLineState): PatchLineState {
-  return { content: line.content, availableForHunkMatch: false };
+  return { ...line, availableForHunkMatch: false };
 }
 
 function textSelectorMatches(content: string, op: MatchPatchOp): boolean {
@@ -551,6 +643,120 @@ function combinedSelectorMatches(content: string, selector: NonNullable<MatchPat
 
 function hasMatchSelector(op: MatchPatchOp): boolean {
   return op.hash !== undefined || op.content !== undefined || op.combinedSelector !== undefined;
+}
+
+function isOrderAssistableHunk(hunk: Hunk, anchorMode: AnchorMode): boolean {
+  return anchorMode === "strict" && !hunkHasSmartSelector(hunk) && !hunkHasSparseRange(hunk);
+}
+
+function findFixedContiguousHunkCandidates(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[]
+): SparseMatch[] {
+  return findContiguousMatches(
+    entries,
+    matchOps,
+    getAnchorSearchStart(hunk),
+    getAnchorSearchEnd(hunk),
+    lineMatchesOp,
+    () => true,
+    Number.MAX_SAFE_INTEGER
+  ).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
+}
+
+function resolveHunkMatchOrThrow(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  hunkIndex: number,
+  matchOps: readonly MatchPatchOp[],
+  anchorMode: AnchorMode
+): ResolvedHunkMatch {
+  const resolvedMatch = anchorMode === "tolerant" && hunk.anchorHint
+    ? findTolerantAnchorMatch(entries, hunk, matchOps)
+    : findResolvedHunkMatch(entries, hunk, matchOps, {
+      start: getAnchorSearchStart(hunk),
+      end: getAnchorSearchEnd(hunk)
+    });
+  if (resolvedMatch) return resolvedMatch;
+
+  if (anchorMode === "tolerant" && hunk.anchorHint) {
+    throw new StaleHunkError("Hunk not found in any anchor affinity.", hunkErrorLocation(hunk));
+  }
+  const staleDetail = `Hunk not found${renderAnchorSearchScope(hunk)}.`;
+  const diagnosticMatch = hunk.anchorHint
+    ? findOutsideAnchorDiagnosticMatch(entries, hunk, matchOps)
+    : undefined;
+  if (diagnosticMatch) {
+    throw new StaleHunkError(`${staleDetail} ${renderOutsideAnchorDiagnostic(diagnosticMatch.match)}`, hunkErrorLocation(hunk));
+  }
+  throw new StaleHunkError(staleDetail, hunkErrorLocation(hunk));
+}
+
+function validateResolvedReplaceRows(
+  sourceLines: readonly PatchLineState[],
+  hunk: Hunk,
+  hunkIndex: number,
+  match: SparseMatch
+): void {
+  for (const [opIndex, op] of hunk.ops.entries()) {
+    if (op.kind !== "context") continue;
+    const replaceOps = followingReplaceOps(hunk.ops, opIndex);
+    if (replaceOps.length === 0) continue;
+    const sourceIndex = match.lineIndexes.get(opIndex);
+    if (sourceIndex === undefined) throw new Error("Internal patch error: missing resolved context line.");
+    applyLineReplaceOps(sourceLines[sourceIndex].content, replaceOps, hunkIndex, hunk);
+  }
+}
+
+function validateResolvedHunkConflicts(hunks: readonly ResolvedSectionHunk[], anchorMode: AnchorMode): void {
+  for (const [hunkOffset, hunk] of hunks.entries()) {
+    const match = hunk.match?.match;
+    if (!match) continue;
+    for (let priorOffset = 0; priorOffset < hunkOffset; priorOffset += 1) {
+      const priorMatch = hunks[priorOffset].match?.match;
+      if (priorMatch && priorMatch.start < match.end && match.start < priorMatch.end) {
+        const message = anchorMode === "tolerant" && hunk.hunk.anchorHint
+          ? "Hunk not found in any anchor affinity."
+          : `Hunk not found${renderAnchorSearchScope(hunk.hunk)}.`;
+        throw new StaleHunkError(message, hunkErrorLocation(hunk.hunk));
+      }
+    }
+  }
+}
+
+function materializeSourceMatch(
+  sourceMatch: ResolvedHunkMatch,
+  currentLines: readonly PatchLineState[],
+  sourceLineCount: number
+): ResolvedHunkMatch {
+  const currentIndexBySourceIndex = new Map<number, number>();
+  for (const [currentIndex, line] of currentLines.entries()) {
+    if (line.sourceIndex !== undefined) currentIndexBySourceIndex.set(line.sourceIndex, currentIndex);
+  }
+  const currentIndexForSource = (sourceIndex: number) => {
+    const currentIndex = currentIndexBySourceIndex.get(sourceIndex);
+    if (currentIndex === undefined) throw new Error("Internal patch error: pre-resolved source line is unavailable.");
+    return currentIndex;
+  };
+  const currentBoundaryForSource = (sourceIndex: number) =>
+    sourceIndex === sourceLineCount ? currentLines.length : currentIndexForSource(sourceIndex);
+  const match = sourceMatch.match;
+  return {
+    ...sourceMatch,
+    match: {
+      start: currentIndexForSource(match.start),
+      // The source boundary after this span may have been deleted, or may have
+      // prior inserted output before it. End after the span's final source line
+      // so this hunk rewrites only its original lines and retains that output.
+      end: currentIndexForSource(match.end - 1) + 1,
+      lineIndexes: new Map(Array.from(match.lineIndexes, ([opIndex, sourceIndex]) => [opIndex, currentIndexForSource(sourceIndex)])),
+      ranges: new Map(Array.from(match.ranges, ([opIndex, range]) => [
+        opIndex,
+        { start: currentBoundaryForSource(range.start), end: currentBoundaryForSource(range.end) }
+      ]))
+    }
+  };
 }
 
 function findResolvedHunkMatch(
@@ -1099,13 +1305,13 @@ function renderSkippedContextRange(lineCount: number): string {
   return lineCount === 0 ? "..." : `... ${lineCount} skipped context line${lineCount === 1 ? "" : "s"}`;
 }
 
-function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp, matchFilter: (match: SparseMatch) => boolean = () => true): number[] {
+function findContiguousMatches(entries: CurrentLineEntry[], sequence: readonly MatchPatchOp[], searchStart = 0, searchEnd = entries.length, lineMatcher: LineMatcher = lineMatchesOp, matchFilter: (match: SparseMatch) => boolean = () => true, maxMatches = 2): number[] {
   const matches: number[] = [];
   const lastStart = Math.min(entries.length - sequence.length, searchEnd - sequence.length);
   for (let index = searchStart; index <= lastStart; index += 1) {
     if (sequence.every((op, offset) => lineMatcher(entries[index + offset], op)) && matchFilter(contiguousMatchToSparseMatch(sequence, index))) {
       matches.push(index);
-      if (matches.length >= 2) break;
+      if (matches.length >= maxMatches) break;
     }
   }
   return matches;
