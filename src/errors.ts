@@ -54,6 +54,18 @@ export class AmbiguousHunkError extends HashlinePatchError {
   }
 }
 
+export class ConflictingHunksError extends HashlinePatchError {
+  constructor(message: string, location?: PatchErrorLocation) {
+    super("[E_CONFLICTING_HUNKS]", message, location);
+  }
+}
+
+export class HunkCandidateLimitError extends HashlinePatchError {
+  constructor(message: string, location?: PatchErrorLocation) {
+    super("[E_HUNK_CANDIDATE_LIMIT]", message, location);
+  }
+}
+
 export class UnsupportedHunkError extends HashlinePatchError {
   constructor(message: string, location?: PatchErrorLocation) {
     super("[E_UNSUPPORTED_HUNK]", message, location);

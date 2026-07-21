@@ -1,4 +1,4 @@
-import { AmbiguousHunkError, InvalidPatchError, StaleHunkError, UnsupportedHunkError } from "./errors.js";
+import { AmbiguousHunkError, ConflictingHunksError, HunkCandidateLimitError, InvalidPatchError, StaleHunkError, UnsupportedHunkError } from "./errors.js";
 import { type HashFunction, hashLine } from "./hash.js";
 import { normalizeCombinedTextSelector, parsePatch, type Hunk, type MatchPatchOp, type Patch, type ReplacePatchOp } from "./patch-format.js";
 import { renderHashLines, toHashLines, type HashLineEntry } from "./read-format.js";
@@ -46,6 +46,18 @@ export interface ToleratedAnchorResolution {
   resolvedMatch: { startLine: number; endLine: number };
 }
 
+export interface OrderAssistedHunkSpan {
+  hunkIndex: number;
+  startLine: number;
+  endLine: number;
+}
+
+export interface OrderAssistedResolution {
+  groupStartHunk: number;
+  groupEndHunk: number;
+  selectedSpans: OrderAssistedHunkSpan[];
+}
+
 export interface PatchHunkAudit {
   hunkIndex: number;
   matchStart: number | null;
@@ -61,6 +73,7 @@ export interface PatchHunkAudit {
   insertedHashes: string[];
   deletedHashes: string[];
   anchorResolution?: ToleratedAnchorResolution;
+  orderAssisted?: OrderAssistedResolution;
 }
 
 export interface ApplyPatchResult {
@@ -92,7 +105,8 @@ const SMART_MATCH_RANKS: Record<SmartMatcherKind, number> = {
   fuzzy: 4,
   charSubsequence: 5
 };
-const SMART_MATCH_CANDIDATE_LIMIT = 1000;
+const HUNK_CANDIDATE_LIMIT = 1000;
+const AMBIGUITY_GROUP_ASSIGNMENT_STATE_LIMIT = 100_000;
 const SMART_FUZZY_MIN_TOKEN_LENGTH = 6;
 const SMART_FUZZY_TWO_EDIT_TOKEN_LENGTH = 16;
 const SMART_FUZZY_SINGLE_TOKEN_MIN_LENGTH = 8;
@@ -104,6 +118,7 @@ interface ResolvedHunkMatch {
   smartMatcherKinds: Map<number, PatchMatcherKind>;
   smartMatcherEditCosts: Map<number, number>;
   anchorResolution?: ToleratedAnchorResolution;
+  orderAssisted?: OrderAssistedResolution;
 }
 
 interface HunkMatchSearch {
@@ -200,7 +215,7 @@ interface ResolvedSectionHunk {
 interface AmbiguousSectionHunk {
   hunk: Hunk;
   hunkIndex: number;
-  candidates: SparseMatch[];
+  candidates: ResolvedHunkMatch[];
 }
 
 function resolveSectionHunks(
@@ -235,54 +250,233 @@ function resolveSectionHunks(
 
     validateSparseRanges(hunk, hunkIndex);
     const matchOps = hunk.ops.filter(isMatchOp);
-    if (isOrderAssistableHunk(hunk, anchorMode)) {
-      const candidates = findFixedContiguousHunkCandidates(entries, hunk, matchOps);
-      if (candidates.length > 1) {
-        resolutions.push({ hunk, hunkIndex, candidates });
-        continue;
-      }
-      if (candidates.length === 1) {
-        const match = { match: candidates[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
-        validateResolvedReplaceRows(sourceLines, hunk, hunkIndex, match.match);
-        resolutions.push({ hunk, hunkIndex, match });
-        continue;
-      }
+    const candidates = findHunkCandidatesOrThrow(entries, hunk, matchOps, anchorMode);
+    if (candidates.length > 1) {
+      resolutions.push({ hunk, hunkIndex, candidates });
+      continue;
     }
-
-    const match = resolveHunkMatchOrThrow(entries, hunk, hunkIndex, matchOps, anchorMode);
+    const match = candidates[0];
     validateResolvedReplaceRows(sourceLines, hunk, hunkIndex, match.match);
     resolutions.push({ hunk, hunkIndex, match });
   }
 
-  const ambiguities = resolutions.filter((resolution): resolution is AmbiguousSectionHunk => "candidates" in resolution);
-  if (ambiguities.length > 0) {
-    if (ambiguities.length === 1) {
-      const ambiguous = ambiguities[0];
-      const hunkOffset = ambiguous.hunkIndex - 1;
-      const previous = resolutions[hunkOffset - 1];
-      const next = resolutions[hunkOffset + 1];
-      const previousMatch = previous && "match" in previous ? previous.match?.match : undefined;
-      const nextMatch = next && "match" in next ? next.match?.match : undefined;
-      const candidates = ambiguous.candidates.filter((candidate) =>
-        (previousMatch === undefined || previousMatch.end <= candidate.start) &&
-        (nextMatch === undefined || candidate.end <= nextMatch.start)
-      );
-      if (candidates.length === 1 && (previousMatch !== undefined || nextMatch !== undefined)) {
-        const match = { match: candidates[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
-        validateResolvedReplaceRows(sourceLines, ambiguous.hunk, ambiguous.hunkIndex, match.match);
-        resolutions[hunkOffset] = { hunk: ambiguous.hunk, hunkIndex: ambiguous.hunkIndex, match };
-      }
-    }
-
-    const unresolved = resolutions.find((resolution): resolution is AmbiguousSectionHunk => "candidates" in resolution);
-    if (unresolved) {
-      throw new AmbiguousHunkError(`Hunk matched ${unresolved.candidates.length} spans${renderAnchorSearchScope(unresolved.hunk)}.`, hunkErrorLocation(unresolved.hunk));
-    }
-  }
+  resolveAmbiguityGroups(resolutions, sourceLines);
 
   const resolved = resolutions as ResolvedSectionHunk[];
-  validateResolvedHunkConflicts(resolved, anchorMode);
+  validateResolvedHunkConflicts(resolved);
   return resolved;
+}
+
+type AssignmentCardinality = "zero" | "one" | "many";
+
+interface AssignmentSearchResult {
+  cardinality: AssignmentCardinality;
+  assignment?: ResolvedHunkMatch[];
+}
+
+function resolveAmbiguityGroups(
+  resolutions: Array<ResolvedSectionHunk | AmbiguousSectionHunk>,
+  sourceLines: readonly PatchLineState[]
+): void {
+  const occupiedMatches = resolutions.flatMap((resolution) =>
+    "candidates" in resolution || !resolution.match ? [] : [resolution.match]
+  );
+
+  for (let groupStart = 0; groupStart < resolutions.length;) {
+    const first = resolutions[groupStart];
+    if (!("candidates" in first)) {
+      groupStart += 1;
+      continue;
+    }
+
+    let groupEnd = groupStart + 1;
+    while (groupEnd < resolutions.length && "candidates" in resolutions[groupEnd]) groupEnd += 1;
+    const group = resolutions.slice(groupStart, groupEnd) as AmbiguousSectionHunk[];
+    const conflictFree = searchAssignments(group, occupiedMatches);
+    if (conflictFree.cardinality === "zero") {
+      throw new ConflictingHunksError(renderConflictingGroupDetail(group), hunkErrorLocation(first.hunk));
+    }
+
+    let selected = conflictFree.assignment;
+    let orderAssisted = false;
+    if (conflictFree.cardinality === "many") {
+      const previousBoundary = findNearestResolvedMatch(resolutions, groupStart - 1, -1);
+      const nextBoundary = findNearestResolvedMatch(resolutions, groupEnd, 1);
+      const internallyOrdered = searchAssignments(group, occupiedMatches, isInternallySourceOrdered);
+      const availablePreviousBoundary = previousBoundary && searchAssignments(
+        group,
+        occupiedMatches,
+        (assignment) => isInternallySourceOrdered(assignment) && previousBoundary.match.end <= assignment[0].match.start
+      ).cardinality !== "zero" ? previousBoundary : undefined;
+      const availableNextBoundary = nextBoundary && searchAssignments(
+        group,
+        occupiedMatches,
+        (assignment) => isInternallySourceOrdered(assignment) && assignment.at(-1)!.match.end <= nextBoundary.match.start
+      ).cardinality !== "zero" ? nextBoundary : undefined;
+      let ordered = searchAssignments(group, occupiedMatches, (assignment) =>
+        isSourceOrderedAssignment(assignment, availablePreviousBoundary, availableNextBoundary)
+      );
+      // Individually usable boundaries can still be mutually incompatible. If
+      // the group itself has one ordered assignment, optional boundaries may
+      // not turn that locally resolvable group into a failure.
+      if (ordered.cardinality === "zero" && internallyOrdered.cardinality === "one") ordered = internallyOrdered;
+      if (ordered.cardinality !== "one") {
+        throw new AmbiguousHunkError(renderAmbiguousGroupDetail(group, ordered.cardinality), hunkErrorLocation(first.hunk));
+      }
+      selected = ordered.assignment;
+      orderAssisted = true;
+    }
+
+    if (!selected) throw new Error("Internal patch error: missing ambiguity-group assignment.");
+    const orderAssistance = orderAssisted ? createOrderAssistedResolution(group, selected) : undefined;
+    for (const [offset, candidate] of selected.entries()) {
+      const ambiguous = group[offset];
+      const match = orderAssistance ? { ...candidate, orderAssisted: orderAssistance } : candidate;
+      validateResolvedReplaceRows(sourceLines, ambiguous.hunk, ambiguous.hunkIndex, match.match);
+      resolutions[groupStart + offset] = { hunk: ambiguous.hunk, hunkIndex: ambiguous.hunkIndex, match };
+    }
+    occupiedMatches.push(...selected);
+    groupStart = groupEnd;
+  }
+}
+
+function searchAssignments(
+  group: readonly AmbiguousSectionHunk[],
+  occupiedMatches: readonly ResolvedHunkMatch[],
+  include: (assignment: readonly ResolvedHunkMatch[]) => boolean = () => true
+): AssignmentSearchResult {
+  const candidateIndexes = new Array<number>(group.length).fill(0);
+  const selected: ResolvedHunkMatch[] = [];
+  let depth = 0;
+  let exploredStates = 0;
+  let count = 0;
+  let onlyAssignment: ResolvedHunkMatch[] | undefined;
+
+  while (depth >= 0 && count < 2) {
+    if (depth === group.length) {
+      if (include(selected)) {
+        count += 1;
+        if (count === 1) onlyAssignment = [...selected];
+      }
+      depth -= 1;
+      selected.pop();
+      continue;
+    }
+
+    const candidates = group[depth].candidates;
+    let selectedCandidate = false;
+    while (candidateIndexes[depth] < candidates.length) {
+      const candidate = candidates[candidateIndexes[depth]++];
+      exploredStates += 1;
+      if (exploredStates > AMBIGUITY_GROUP_ASSIGNMENT_STATE_LIMIT) {
+        throw new HunkCandidateLimitError(renderAssignmentStateLimitDetail(group, exploredStates), hunkErrorLocation(group[0].hunk));
+      }
+      if (occupiedMatches.some((occupied) => matchesOverlap(candidate, occupied)) || selected.some((prior) => matchesOverlap(candidate, prior))) continue;
+      selected.push(candidate);
+      depth += 1;
+      if (depth < group.length) candidateIndexes[depth] = 0;
+      selectedCandidate = true;
+      break;
+    }
+    if (selectedCandidate) continue;
+
+    candidateIndexes[depth] = 0;
+    depth -= 1;
+    if (depth >= 0) selected.pop();
+  }
+
+  return count === 0 ? { cardinality: "zero" } : count === 1 ? { cardinality: "one", assignment: onlyAssignment } : { cardinality: "many" };
+}
+
+function findNearestResolvedMatch(
+  resolutions: readonly (ResolvedSectionHunk | AmbiguousSectionHunk)[],
+  start: number,
+  step: -1 | 1
+): ResolvedHunkMatch | undefined {
+  for (let index = start; index >= 0 && index < resolutions.length; index += step) {
+    const resolution = resolutions[index];
+    if (!("candidates" in resolution) && resolution.match) return resolution.match;
+  }
+  return undefined;
+}
+
+function isInternallySourceOrdered(assignment: readonly ResolvedHunkMatch[]): boolean {
+  return assignment.every((match, index) => index === 0 || assignment[index - 1].match.end <= match.match.start);
+}
+
+function isSourceOrderedAssignment(
+  assignment: readonly ResolvedHunkMatch[],
+  previousBoundary: ResolvedHunkMatch | undefined,
+  nextBoundary: ResolvedHunkMatch | undefined
+): boolean {
+  if (!isInternallySourceOrdered(assignment)) return false;
+  if (previousBoundary && previousBoundary.match.end > assignment[0].match.start) return false;
+  if (nextBoundary && assignment.at(-1)!.match.end > nextBoundary.match.start) return false;
+  return true;
+}
+
+function matchesOverlap(left: ResolvedHunkMatch, right: ResolvedHunkMatch): boolean {
+  return left.match.start < right.match.end && right.match.start < left.match.end;
+}
+
+function createOrderAssistedResolution(
+  group: readonly AmbiguousSectionHunk[],
+  selected: readonly ResolvedHunkMatch[]
+): OrderAssistedResolution {
+  return {
+    groupStartHunk: group[0].hunkIndex,
+    groupEndHunk: group.at(-1)!.hunkIndex,
+    selectedSpans: selected.map((candidate, index) => ({
+      hunkIndex: group[index].hunkIndex,
+      startLine: candidate.match.start + 1,
+      endLine: candidate.match.end
+    }))
+  };
+}
+
+function renderConflictingGroupDetail(group: readonly AmbiguousSectionHunk[]): string {
+  return `Ambiguity group hunks ${group[0].hunkIndex}...${group.at(-1)!.hunkIndex} (${renderGroupInputLineRange(group)}; candidates ${renderGroupCandidateSpans(group)}; conflict-free assignments: 0).`;
+}
+
+function renderAmbiguousGroupDetail(group: readonly AmbiguousSectionHunk[], cardinality: AssignmentCardinality): string {
+  return `Ambiguity group hunks ${group[0].hunkIndex}...${group.at(-1)!.hunkIndex} (${renderGroupInputLineRange(group)}; candidates ${renderGroupCandidateSpans(group)}; source-ordered assignments: ${renderAssignmentCardinality(cardinality)}).`;
+}
+
+function renderAssignmentStateLimitDetail(group: readonly AmbiguousSectionHunk[], exploredStates: number): string {
+  return `Ambiguity group assignment search exceeded state limit (${AMBIGUITY_GROUP_ASSIGNMENT_STATE_LIMIT}; explored ${exploredStates}+; ${renderGroupInputLineRange(group)}; candidates ${renderGroupCandidateSpans(group)}).`;
+}
+
+function renderGroupInputLineRange(group: readonly AmbiguousSectionHunk[]): string {
+  const inputLines = group.flatMap((hunk) => hunk.hunk.ops.flatMap((op) => op.inputLine === undefined ? [] : [op.inputLine]));
+  if (inputLines.length === 0) return "patch input lines unavailable";
+  return `patch input lines ${Math.min(...inputLines)}...${Math.max(...inputLines)}`;
+}
+
+function renderGroupCandidateSpans(group: readonly AmbiguousSectionHunk[]): string {
+  const rendered = group.slice(0, 4).map((hunk) => {
+    const spans = hunk.candidates.slice(0, 4).map((candidate) => `${candidate.match.start + 1}...${candidate.match.end}`).join(",");
+    return `hunk ${hunk.hunkIndex}=[${spans}${hunk.candidates.length > 4 ? ",..." : ""}]`;
+  });
+  return `${rendered.join("; ")}${group.length > 4 ? "; ..." : ""}`;
+}
+
+function renderAssignmentCardinality(cardinality: AssignmentCardinality): string {
+  return cardinality === "many" ? "2+" : cardinality;
+}
+
+function renderHunkCandidateLimitDetail(hunk: Hunk, errorScope: string, matches: readonly SparseMatch[]): string {
+  return `Hunk candidate discovery exceeded limit (${HUNK_CANDIDATE_LIMIT}; discovered ${matches.length}+${errorScope}; ${renderHunkInputLineRange(hunk)}; source spans ${renderBoundedSourceSpans(matches)}).`;
+}
+
+function renderBoundedSourceSpans(matches: readonly SparseMatch[]): string {
+  const rendered = matches.slice(0, 4).map((match) => `${match.start + 1}...${match.end}`).join(",");
+  return `${rendered}${matches.length > 4 ? ",..." : ""}`;
+}
+
+function renderHunkInputLineRange(hunk: Hunk): string {
+  const inputLines = hunk.ops.flatMap((op) => op.inputLine === undefined ? [] : [op.inputLine]);
+  if (inputLines.length === 0) return "patch input lines unavailable";
+  return `patch input lines ${Math.min(...inputLines)}...${Math.max(...inputLines)}`;
 }
 
 function applyHunk(
@@ -462,7 +656,8 @@ function applyHunk(
       survivingContextHashes,
       insertedHashes,
       deletedHashes,
-      ...(resolvedMatch.anchorResolution ? { anchorResolution: resolvedMatch.anchorResolution } : {})
+      ...(resolvedMatch.anchorResolution ? { anchorResolution: resolvedMatch.anchorResolution } : {}),
+      ...(resolvedMatch.orderAssisted ? { orderAssisted: resolvedMatch.orderAssisted } : {})
     }
   };
 }
@@ -645,40 +840,19 @@ function hasMatchSelector(op: MatchPatchOp): boolean {
   return op.hash !== undefined || op.content !== undefined || op.combinedSelector !== undefined;
 }
 
-function isOrderAssistableHunk(hunk: Hunk, anchorMode: AnchorMode): boolean {
-  return anchorMode === "strict" && !hunkHasSmartSelector(hunk) && !hunkHasSparseRange(hunk);
-}
-
-function findFixedContiguousHunkCandidates(
+function findHunkCandidatesOrThrow(
   entries: CurrentLineEntry[],
   hunk: Hunk,
-  matchOps: readonly MatchPatchOp[]
-): SparseMatch[] {
-  return findContiguousMatches(
-    entries,
-    matchOps,
-    getAnchorSearchStart(hunk),
-    getAnchorSearchEnd(hunk),
-    lineMatchesOp,
-    () => true,
-    Number.MAX_SAFE_INTEGER
-  ).map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
-}
-
-function resolveHunkMatchOrThrow(
-  entries: CurrentLineEntry[],
-  hunk: Hunk,
-  hunkIndex: number,
   matchOps: readonly MatchPatchOp[],
   anchorMode: AnchorMode
-): ResolvedHunkMatch {
-  const resolvedMatch = anchorMode === "tolerant" && hunk.anchorHint
-    ? findTolerantAnchorMatch(entries, hunk, matchOps)
-    : findResolvedHunkMatch(entries, hunk, matchOps, {
+): ResolvedHunkMatch[] {
+  const candidates = anchorMode === "tolerant" && hunk.anchorHint
+    ? findTolerantHunkCandidates(entries, hunk, matchOps)
+    : findStrongestHunkCandidates(entries, hunk, matchOps, {
       start: getAnchorSearchStart(hunk),
       end: getAnchorSearchEnd(hunk)
     });
-  if (resolvedMatch) return resolvedMatch;
+  if (candidates.length > 0) return candidates;
 
   if (anchorMode === "tolerant" && hunk.anchorHint) {
     throw new StaleHunkError("Hunk not found in any anchor affinity.", hunkErrorLocation(hunk));
@@ -691,6 +865,63 @@ function resolveHunkMatchOrThrow(
     throw new StaleHunkError(`${staleDetail} ${renderOutsideAnchorDiagnostic(diagnosticMatch.match)}`, hunkErrorLocation(hunk));
   }
   throw new StaleHunkError(staleDetail, hunkErrorLocation(hunk));
+}
+
+function findStrongestHunkCandidates(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[],
+  search: HunkMatchSearch
+): ResolvedHunkMatch[] {
+  const searchEnd = search.end ?? entries.length;
+  const errorScope = search.errorScope ?? renderAnchorSearchScope(hunk);
+  const matchFilter = search.matchFilter ?? (() => true);
+
+  if (!hunkHasSmartSelector(hunk)) {
+    const matches = hunkHasSparseRange(hunk)
+      ? findSparseMatches(entries, hunk.ops, HUNK_CANDIDATE_LIMIT + 1, search.start, searchEnd, lineMatchesOp, matchFilter)
+      : findContiguousMatches(entries, matchOps, search.start, searchEnd, lineMatchesOp, matchFilter, HUNK_CANDIDATE_LIMIT + 1)
+        .map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
+    if (matches.length > HUNK_CANDIDATE_LIMIT) {
+      throw new HunkCandidateLimitError(renderHunkCandidateLimitDetail(hunk, errorScope, matches), hunkErrorLocation(hunk));
+    }
+    return matches.map((match) => ({ match, smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() }));
+  }
+
+  const candidates = hunkHasSparseRange(hunk)
+    ? findSparseSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter)
+    : findContiguousSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter);
+  if (candidates.length > HUNK_CANDIDATE_LIMIT) {
+    throw new HunkCandidateLimitError(renderHunkCandidateLimitDetail(hunk, errorScope, candidates.map((candidate) => candidate.match)), hunkErrorLocation(hunk));
+  }
+  return nonDominatedSmartCandidates(candidates, smartOpIndexes(hunk.ops));
+}
+
+function findTolerantHunkCandidates(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[]
+): ResolvedHunkMatch[] {
+  const anchor = hunk.anchorHint;
+  if (!anchor) return [];
+
+  for (const affinity of ["contained", "overlapping", "outside"] as const) {
+    const candidates = findStrongestHunkCandidates(entries, hunk, matchOps, anchorAffinitySearch(hunk, entries.length, affinity));
+    if (candidates.length === 0) continue;
+    if (affinity === "contained") return candidates;
+    return candidates.map((candidate) => ({
+      ...candidate,
+      anchorResolution: {
+        affinity,
+        authoredAnchor: {
+          startLine: anchor.line,
+          ...(anchor.endLine === undefined ? {} : { endLine: anchor.endLine })
+        },
+        resolvedMatch: { startLine: candidate.match.start + 1, endLine: candidate.match.end }
+      }
+    }));
+  }
+  return [];
 }
 
 function validateResolvedReplaceRows(
@@ -709,17 +940,18 @@ function validateResolvedReplaceRows(
   }
 }
 
-function validateResolvedHunkConflicts(hunks: readonly ResolvedSectionHunk[], anchorMode: AnchorMode): void {
+function validateResolvedHunkConflicts(hunks: readonly ResolvedSectionHunk[]): void {
   for (const [hunkOffset, hunk] of hunks.entries()) {
     const match = hunk.match?.match;
     if (!match) continue;
     for (let priorOffset = 0; priorOffset < hunkOffset; priorOffset += 1) {
-      const priorMatch = hunks[priorOffset].match?.match;
+      const prior = hunks[priorOffset];
+      const priorMatch = prior.match?.match;
       if (priorMatch && priorMatch.start < match.end && match.start < priorMatch.end) {
-        const message = anchorMode === "tolerant" && hunk.hunk.anchorHint
-          ? "Hunk not found in any anchor affinity."
-          : `Hunk not found${renderAnchorSearchScope(hunk.hunk)}.`;
-        throw new StaleHunkError(message, hunkErrorLocation(hunk.hunk));
+        throw new ConflictingHunksError(
+          `Resolved hunks ${prior.hunkIndex} and ${hunk.hunkIndex} overlap source spans ${priorMatch.start + 1}...${priorMatch.end} and ${match.start + 1}...${match.end} (${renderHunkInputLineRange(prior.hunk)}; ${renderHunkInputLineRange(hunk.hunk)}).`,
+          hunkErrorLocation(hunk.hunk)
+        );
       }
     }
   }
@@ -757,73 +989,6 @@ function materializeSourceMatch(
       ]))
     }
   };
-}
-
-function findResolvedHunkMatch(
-  entries: CurrentLineEntry[],
-  hunk: Hunk,
-  matchOps: readonly MatchPatchOp[],
-  search: HunkMatchSearch
-): ResolvedHunkMatch | undefined {
-  const searchEnd = search.end ?? entries.length;
-  const errorScope = search.errorScope ?? renderAnchorSearchScope(hunk);
-  const matchFilter = search.matchFilter ?? (() => true);
-
-  if (!hunkHasSmartSelector(hunk)) {
-    const matches = hunkHasSparseRange(hunk)
-      ? findSparseMatches(entries, hunk.ops, 2, search.start, searchEnd, lineMatchesOp, matchFilter)
-      : findContiguousMatches(entries, matchOps, search.start, searchEnd, lineMatchesOp, matchFilter)
-        .map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
-
-    if (matches.length > 1) {
-      throw new AmbiguousHunkError(`Hunk matched ${matches.length} spans${errorScope}.`, hunkErrorLocation(hunk));
-    }
-    if (matches.length === 1) {
-      return { match: matches[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() };
-    }
-    return undefined;
-  }
-
-  const candidates = hunkHasSparseRange(hunk)
-    ? findSparseSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter)
-    : findContiguousSmartMatchCandidates(entries, hunk.ops, search.start, searchEnd, matchFilter);
-
-  if (candidates.length > SMART_MATCH_CANDIDATE_LIMIT) {
-    throw new AmbiguousHunkError(`Hunk exceeded smart match candidate cap (${SMART_MATCH_CANDIDATE_LIMIT})${errorScope}.`, hunkErrorLocation(hunk));
-  }
-  if (candidates.length === 0) return undefined;
-
-  const bestCandidates = nonDominatedSmartCandidates(candidates, smartOpIndexes(hunk.ops));
-  if (bestCandidates.length !== 1) {
-    throw new AmbiguousHunkError(`Hunk matched ${candidates.length} smart candidates with ${bestCandidates.length} non-dominated winners${errorScope}.`, hunkErrorLocation(hunk));
-  }
-  return bestCandidates[0];
-}
-
-function findTolerantAnchorMatch(
-  entries: CurrentLineEntry[],
-  hunk: Hunk,
-  matchOps: readonly MatchPatchOp[]
-): ResolvedHunkMatch | undefined {
-  if (!hunk.anchorHint) return undefined;
-
-  for (const affinity of ["contained", "overlapping", "outside"] as const) {
-    const resolved = findResolvedHunkMatch(entries, hunk, matchOps, anchorAffinitySearch(hunk, entries.length, affinity));
-    if (!resolved) continue;
-    if (affinity === "contained") return resolved;
-    return {
-      ...resolved,
-      anchorResolution: {
-        affinity,
-        authoredAnchor: {
-          startLine: hunk.anchorHint.line,
-          ...(hunk.anchorHint.endLine === undefined ? {} : { endLine: hunk.anchorHint.endLine })
-        },
-        resolvedMatch: { startLine: resolved.match.start + 1, endLine: resolved.match.end }
-      }
-    };
-  }
-  return undefined;
 }
 
 function anchorAffinitySearch(hunk: Hunk, lineCount: number, affinity: AnchorAffinity): HunkMatchSearch {
@@ -879,18 +1044,45 @@ function findOutsideAnchorDiagnosticMatch(
   hunk: Hunk,
   matchOps: readonly MatchPatchOp[]
 ): ResolvedHunkMatch | undefined {
-  let diagnosticMatch: ResolvedHunkMatch | undefined;
-  try {
-    diagnosticMatch = findResolvedHunkMatch(entries, hunk, matchOps, { start: 0 });
-  } catch (error) {
-    if (error instanceof AmbiguousHunkError) return undefined;
-    throw error;
-  }
+  // This is diagnostic-only: never let whole-file candidate volume change a
+  // stale strict-anchor failure into a candidate-limit failure.
+  const diagnosticMatch = hunkHasSmartSelector(hunk)
+    ? findBoundedSmartDiagnosticMatch(entries, hunk)
+    : findBoundedFixedDiagnosticMatch(entries, hunk, matchOps);
   if (!diagnosticMatch || !hunk.anchorHint) return undefined;
   const match = diagnosticMatch.match;
   const startsBeforeAnchor = match.start < hunk.anchorHint.line - 1;
   const endsAfterAnchor = hunk.anchorHint.endLine !== undefined && match.end > hunk.anchorHint.endLine;
   return startsBeforeAnchor || endsAfterAnchor ? diagnosticMatch : undefined;
+}
+
+function findBoundedFixedDiagnosticMatch(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[]
+): ResolvedHunkMatch | undefined {
+  const matches = hunkHasSparseRange(hunk)
+    ? findSparseMatches(entries, hunk.ops, 2, 0, entries.length)
+    : findContiguousMatches(entries, matchOps, 0, entries.length, lineMatchesOp, () => true, 2)
+      .map((start) => contiguousMatchToSparseMatch(hunk.ops, start));
+  return matches.length === 1
+    ? { match: matches[0], smartMatcherKinds: new Map(), smartMatcherEditCosts: new Map() }
+    : undefined;
+}
+
+function findBoundedSmartDiagnosticMatch(
+  entries: CurrentLineEntry[],
+  hunk: Hunk
+): ResolvedHunkMatch | undefined {
+  try {
+    const candidates = findStrongestHunkCandidates(entries, hunk, hunk.ops.filter(isMatchOp), { start: 0 });
+    return candidates.length === 1 ? candidates[0] : undefined;
+  } catch (error) {
+    // Optional guidance must not expose an oversized whole-file search as a
+    // real resolution failure.
+    if (error instanceof HunkCandidateLimitError) return undefined;
+    throw error;
+  }
 }
 
 function renderOutsideAnchorDiagnostic(match: SparseMatch): string {
@@ -1102,7 +1294,7 @@ function findContiguousSmartMatchCandidates(entries: CurrentLineEntry[], ops: re
     const candidate = contiguousSmartMatchCandidateAt(entries, ops, start);
     if (!candidate || !matchFilter(candidate.match)) continue;
     candidates.push(candidate);
-    if (candidates.length > SMART_MATCH_CANDIDATE_LIMIT) break;
+    if (candidates.length > HUNK_CANDIDATE_LIMIT) break;
   }
   return candidates;
 }
@@ -1133,7 +1325,7 @@ function contiguousSmartMatchCandidateAt(entries: readonly CurrentLineEntry[], o
 
 function findSparseSmartMatchCandidates(entries: CurrentLineEntry[], ops: readonly Hunk["ops"][number][], searchStart = 0, searchEnd = entries.length, matchFilter: (match: SparseMatch) => boolean = () => true): SmartHunkCandidate[] {
   const candidates: SmartHunkCandidate[] = [];
-  for (let start = searchStart; start <= entries.length && start <= searchEnd && candidates.length <= SMART_MATCH_CANDIDATE_LIMIT; start += 1) {
+  for (let start = searchStart; start <= entries.length && start <= searchEnd && candidates.length <= HUNK_CANDIDATE_LIMIT; start += 1) {
     collectSparseSmartMatchCandidates({
       entries,
       ops,
@@ -1166,7 +1358,7 @@ function collectSparseSmartMatchCandidates(state: {
   candidates: SmartHunkCandidate[];
   matchFilter: (match: SparseMatch) => boolean;
 }): void {
-  if (state.candidates.length > SMART_MATCH_CANDIDATE_LIMIT) return;
+  if (state.candidates.length > HUNK_CANDIDATE_LIMIT) return;
   const opIndex = nextMatchOpIndex(state.ops, state.opIndex);
   if (opIndex === undefined) {
     const match = { start: state.start, end: state.position, lineIndexes: state.lineIndexes, ranges: state.ranges };
@@ -1193,7 +1385,7 @@ function collectSparseSmartMatchCandidates(state: {
     return;
   }
 
-  for (let end = state.position; end <= state.entries.length && end <= state.searchEnd && state.candidates.length <= SMART_MATCH_CANDIDATE_LIMIT; end += 1) {
+  for (let end = state.position; end <= state.entries.length && end <= state.searchEnd && state.candidates.length <= HUNK_CANDIDATE_LIMIT; end += 1) {
     if (!rangeIsAvailableForHunkMatch(state.entries, state.position, end)) continue;
     const ranges = new Map(state.ranges);
     ranges.set(opIndex, { start: state.position, end });

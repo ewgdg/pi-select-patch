@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   AmbiguousHunkError,
+  ConflictingHunksError,
+  HunkCandidateLimitError,
   StaleHunkError,
   UnsupportedHunkError,
   applyPatchToText,
@@ -204,9 +206,37 @@ describe("applyPatchToText", () => {
     );
   });
 
+  it("diagnoses a unique smart match outside a strict line anchor", () => {
+    expect(() => applyPatchToText("target", anchoredPatch(2, "-~target"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 2. Unique match exists outside line anchor at line 1."
+    );
+  });
+
+  it("uses smart dominance for strict outside-anchor diagnostics", () => {
+    expect(() => applyPatchToText("alpha\nalpha extra", anchoredPatch(3, "-~alpha"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 3. Unique match exists outside line anchor at line 1."
+    );
+  });
+
+  it("uses smart dominance for sparse strict outside-anchor diagnostics", () => {
+    const text = "start\nalpha\nmid\nend\nstart\nalpha extra\nmid\nend extra";
+
+    expect(() => applyPatchToText(text, anchoredPatch(9, " ~start", " ~alpha", " ...", " ~end"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 9. Unique match exists outside line anchor at lines 1...4."
+    );
+  });
+
   it("diagnoses a unique multi-line match outside a ranged line anchor", () => {
     expect(() => applyPatchToText("before\nother\ntarget\nnext", anchoredRangePatch(1, 2, " :target", " :next"))).toThrow(
       "[E_STALE_HUNK] Line 2: Hunk not found within lines 1...2. Unique match exists outside line anchor at lines 3...4."
+    );
+  });
+
+  it("keeps strict outside-anchor diagnostics stale when the full source exceeds the candidate limit", () => {
+    const text = Array.from({ length: 1_001 }, () => "x").join("\n");
+
+    expect(() => applyPatchToText(text, anchoredPatch(1_002, "-:x"))).toThrow(
+      "[E_STALE_HUNK] Line 2: Hunk not found at or after line 1002."
     );
   });
 
@@ -228,7 +258,7 @@ describe("applyPatchToText", () => {
   });
 
   it("reports ambiguity at or after hunk anchor hints", () => {
-    expect(() => applyPatchToText("x\nx\nx", anchoredPatch(2, "-:x"))).toThrow(/matched 2 spans at or after line 2/);
+    expect(() => applyPatchToText("x\nx\nx", anchoredPatch(2, "-:x"))).toThrow("Ambiguity group hunks 1...1");
   });
 
   it("uses hunk anchor range hints for contiguous matches", () => {
@@ -254,7 +284,7 @@ describe("applyPatchToText", () => {
   });
 
   it("reports ambiguity within hunk anchor ranges", () => {
-    expect(() => applyPatchToText("x\nx\nx", anchoredRangePatch(2, 3, "-:x"))).toThrow(/matched 2 spans within lines 2\.\.\.3/);
+    expect(() => applyPatchToText("x\nx\nx", anchoredRangePatch(2, 3, "-:x"))).toThrow("Ambiguity group hunks 1...1");
   });
 
   it("rejects hunk anchor hints on pure insert hunks", () => {
@@ -310,7 +340,7 @@ describe("applyPatchToText", () => {
 
   it("stops at ambiguity in the active tolerant affinity class", () => {
     expect(() => applyPatchToText("x\nx\nx", anchoredRangePatch(2, 2, " :x", "-:x"), { anchorMode: "tolerant" })).toThrow(
-      "matched 2 spans in overlapping anchor affinity",
+      "Ambiguity group hunks 1...1",
     );
   });
 
@@ -335,7 +365,7 @@ describe("applyPatchToText", () => {
       anchoredRangePatch(3, 3, " :target", "+second"),
     ].join("\n");
 
-    expect(() => applyPatchToText("target", patch, { anchorMode: "tolerant" })).toThrow("Hunk not found in any anchor affinity");
+    expect(() => applyPatchToText("target", patch, { anchorMode: "tolerant" })).toThrow(ConflictingHunksError);
   });
 
   it("does not let outside smart candidates consume an overlapping class candidate cap", () => {
@@ -447,6 +477,197 @@ describe("applyPatchToText", () => {
     expect(result.hunkTranscripts.map((transcript) => transcript.matchStart)).toEqual([1, 2]);
   });
 
+  it("resolves a consecutive ambiguous fixed-hunk group by authored source order", () => {
+    const multi = ["@@", "-:a", "-:x", "+first", "@@", "-:x", "-:b", "+second"].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
+
+    expect(result.text).toBe("first\nb\na\nsecond");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
+  });
+
+  it("uses authored order to resolve a consecutive smart-hunk group", () => {
+    const multi = ["@@", "-~a", "-~x", "+first", "@@", "-~x", "-~b", "+second"].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
+
+    expect(result.text).toBe("first\nb\na\nsecond");
+    expect(result.hunkAudits.map((audit) => audit.orderAssisted)).toEqual([
+      {
+        groupStartHunk: 1,
+        groupEndHunk: 2,
+        selectedSpans: [
+          { hunkIndex: 1, startLine: 1, endLine: 2 },
+          { hunkIndex: 2, startLine: 5, endLine: 6 }
+        ]
+      },
+      {
+        groupStartHunk: 1,
+        groupEndHunk: 2,
+        selectedSpans: [
+          { hunkIndex: 1, startLine: 1, endLine: 2 },
+          { hunkIndex: 2, startLine: 5, endLine: 6 }
+        ]
+      }
+    ]);
+  });
+
+  it("uses authored order to resolve a consecutive sparse-hunk group", () => {
+    const multi = ["@@", "-:a", "-...", "-:b", "+first", "@@", "-:mid", "+second"].join("\n");
+
+    const result = applyPatchToText("a\nmid\nb\na\nmid\nb", multi);
+
+    expect(result.text).toBe("first\na\nsecond\nb");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
+    expect(result.hunkAudits[0].orderAssisted?.selectedSpans).toEqual([
+      { hunkIndex: 1, startLine: 1, endLine: 3 },
+      { hunkIndex: 2, startLine: 5, endLine: 5 }
+    ]);
+  });
+
+  it("uses authored order within the active tolerant anchor affinity", () => {
+    const multi = [
+      "@@ @2...4", " :a", "-:x", "+first",
+      "@@ @3...5", " :x", "-:b", "+second"
+    ].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb", multi, { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("a\nfirst\nb\na\nx\nsecond");
+    expect(result.hunkAudits.map((audit) => audit.anchorResolution?.affinity)).toEqual(["overlapping", "overlapping"]);
+  });
+
+  it("keeps a stronger smart candidate ahead of authored source order", () => {
+    const multi = ["@@", "-~alpha", "@@", "-:target"].join("\n");
+
+    const result = applyPatchToText("alpha extra\ntarget\nalpha\ntarget", multi);
+
+    expect(result.text).toBe("alpha extra\ntarget");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([2, 3]);
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact"]);
+  });
+
+  it("keeps a contained tolerant candidate ahead of source-order assistance", () => {
+    const multi = ["@@ @3", "-:a", "@@", "-:b"].join("\n");
+
+    const result = applyPatchToText("a\nb\na\nb", multi, { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("a\nb");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([2, 3]);
+    expect(result.hunkAudits[0].anchorResolution).toBeUndefined();
+  });
+
+  it("keeps a group ambiguous when no conflict-free assignment is source ordered", () => {
+    const multi = ["@@", "-:a", "-:x", "+first", "@@", "-:x", "-:b", "+second"].join("\n");
+
+    expect(() => applyPatchToText("x\nb\na\nx\nb\na\nx", multi)).toThrow(AmbiguousHunkError);
+  });
+
+  it("reports conflicting hunks when an ambiguity group has no conflict-free assignment", () => {
+    const multi = ["@@", "-:x", "-:x", "+first", "@@", "-:x", "-:x", "+second"].join("\n");
+
+    expect(() => applyPatchToText("x\nx\nx", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it("bounds ambiguity-group assignment search without retaining a Cartesian product", () => {
+    const multi = Array.from({ length: 7 }, (_value, index) => ["@@", "-:x", `+replacement-${index}`].join("\n")).join("\n");
+
+    expect(() => applyPatchToText(Array.from({ length: 14 }, () => "x").join("\n"), multi)).toThrow(AmbiguousHunkError);
+  });
+
+  it("resolves deep ambiguity groups iteratively without exhausting the call stack", () => {
+    const hunkCount = 10_000;
+    const text = Array.from({ length: hunkCount }, (_value, index) => [`item-${index}`, `item-${index}`]).flat().join("\n");
+    const multi = Array.from({ length: hunkCount }, (_value, index) => [
+      `@@ @${index * 2 + 1}...${index * 2 + 2}`,
+      `-:item-${index}`
+    ].join("\n")).join("\n");
+
+    expect(() => applyPatchToText(text, multi)).toThrow(AmbiguousHunkError);
+  });
+
+  it("fails fixed candidate discovery explicitly at the shared hunk candidate limit", () => {
+    const text = Array.from({ length: 1_001 }, () => "x").join("\n");
+    const patchInput = { hunks: [{ ops: [{ kind: "delete" as const, content: "x" }] }] };
+
+    expect(() => applyPatchToText(text, patchInput)).toThrow(HunkCandidateLimitError);
+    expect(() => applyPatchToText(text, patch("-:x"))).toThrow("[E_HUNK_CANDIDATE_LIMIT] Line 2:");
+    expect(() => applyPatchToText(text, patch("-~x"))).toThrow("[E_HUNK_CANDIDATE_LIMIT] Line 2:");
+    expect(() => applyPatchToText(["a", ...Array.from({ length: 1_001 }, () => "b")].join("\n"), patch(" :a", " ...", " :b"))).toThrow("[E_HUNK_CANDIDATE_LIMIT] Line 2:");
+    expect(() => applyPatchToText(text, anchoredRangePatch(1, 1_001, "-:x"), { anchorMode: "tolerant" })).toThrow("[E_HUNK_CANDIDATE_LIMIT] Line 2:");
+    expect(patchInput).toEqual({ hunks: [{ ops: [{ kind: "delete", content: "x" }] }] });
+    expect(applyPatchToText("x", patch("-:x")).text).toBe("");
+  });
+
+  it("reports cross-group source-span reuse as conflicting hunks before materialization", () => {
+    const multi = [
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second",
+      "@@", " :N", "+marker",
+      "@@", "-~a", "-~x", "+third",
+      "@@", "-~x", "-~b", "+fourth"
+    ].join("\n");
+
+    expect(() => applyPatchToText("a\nx\nb\na\nx\nb\nN", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it("chooses the only conflict-free assignment even when it is out of authored source order", () => {
+    const multi = ["@@", "-:a", "-:x", "+first", "@@", "-:x", "-:b", "+second"].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx", multi);
+
+    expect(result.text).toBe("a\nsecond\nfirst");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([3, 1]);
+  });
+
+  it("resolves multiple independent ambiguous fixed-hunk groups in one section", () => {
+    const multi = [
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second",
+      "@@", " :separator", "+between",
+      "@@", "-:c", "-:y", "+third",
+      "@@", "-:y", "-:d", "+fourth"
+    ].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb\nseparator\nc\ny\nd\nc\ny\nd", multi);
+
+    expect(result.text).toBe("first\nb\na\nsecond\nseparator\nbetween\nthird\nd\nc\nfourth");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4, 6, 7, 11]);
+  });
+
+  it("does not let an out-of-order unique hunk disable a local ambiguous group", () => {
+    const multi = [
+      "@@", " :marker", "+after-marker",
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second"
+    ].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb\nmarker", multi);
+
+    expect(result.text).toBe("first\nb\na\nsecond\nmarker\nafter-marker");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([6, 0, 4]);
+  });
+
+  it("ignores mutually incompatible reverse-source boundaries around a locally ordered group", () => {
+    const multi = [
+      "@@", "-:P", "+p",
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second",
+      "@@", "-:N", "+n"
+    ].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\nN\nP\na\nx\nb", multi);
+
+    expect(result.text).toBe("first\nb\nn\np\na\nsecond");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([4, 0, 6, 3]);
+  });
+
+  it("keeps a fixed-hunk group ambiguous when multiple complete assignments are source ordered", () => {
+    const multi = ["@@", "-:a", "-:x", "+first", "@@", "-:x", "-:b", "+second"].join("\n");
+
+    expect(() => applyPatchToText("a\nx\nb\na\nx\nb\na\nx\nb", multi)).toThrow(AmbiguousHunkError);
+  });
+
   it("materializes uniquely resolved hunks in authored order despite reverse source order", () => {
     const multi = ["@@", " :second", "+after-second", "@@", " :first", "+after-first"].join("\n");
 
@@ -480,13 +701,13 @@ describe("applyPatchToText", () => {
   it("does not let later hunks reuse original lines touched by earlier hunks", () => {
     const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row(" ", "b"), row("+", "y")].join("\n");
 
-    expect(() => applyPatchToText("a\nb\nc", multi)).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("a\nb\nc", multi)).toThrow(ConflictingHunksError);
   });
 
   it("does not let later sparse hunks span lines touched by earlier hunks", () => {
     const multi = ["@@", row(" ", "b"), row("+", "x"), "@@", row(" ", "a"), " ...", row(" ", "d"), row("+", "y")].join("\n");
 
-    expect(() => applyPatchToText("a\nb\nc\nd", multi)).toThrow(StaleHunkError);
+    expect(() => applyPatchToText("a\nb\nc\nd", multi)).toThrow(ConflictingHunksError);
   });
 
   it("lets later hunks match untouched original lines after earlier hunks shift offsets", () => {

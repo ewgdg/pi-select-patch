@@ -146,11 +146,11 @@ Hunk headers:
 - `@@ @<line>` and `@@ @<start>...<end>` use strict hard boundaries by default.
 - Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to recover unique overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
 
-Each `Update File` section resolves and validates every hunk against one immutable pre-edit source before materializing output. Resolved source spans cannot overlap; hunks materialize in authored order and never match earlier inserted output. Use another `*** Update File` section when a later edit must depend on earlier output.
+Each `Update File` section resolves and validates every hunk against one immutable pre-edit source before materializing output. Resolved source spans cannot overlap; hunks materialize in authored order and never match earlier inserted output. Consecutive hunks whose strongest candidate sets are tied resolve as one local group: all non-overlapping assignments are considered, then authored source order breaks a tie only when it leaves exactly one complete assignment. A sole non-overlapping assignment applies regardless of order; no such assignment reports conflicting hunks. Use another `*** Update File` section when a later edit must depend on earlier output.
 
 ## Failure behavior
 
-Zero matches mean patch is stale. Multiple equally valid matches mean patch is ambiguous. Both fail without changing that operation.
+Zero matches mean patch is stale. Multiple equally valid matches mean patch is ambiguous. A local ambiguity group with no non-overlapping complete assignment fails as conflicting hunks (`[E_CONFLICTING_HUNKS]`). Candidate or ambiguity-search limits fail explicitly as `[E_HUNK_CANDIDATE_LIMIT]`; limits never choose from a truncated set. All failures leave that operation unchanged.
 
 File operations apply sequentially. If a later operation fails, earlier successful operations remain applied and later operations are skipped. Error includes a retry patch containing failed and skipped operations, avoiding need to resend whole original patch.
 
