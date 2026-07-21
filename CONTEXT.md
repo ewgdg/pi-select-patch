@@ -21,6 +21,24 @@ A candidate's relationship to its line anchor, ordered as contained, overlapping
 A hunk match applied by tolerant anchor mode despite not being fully contained by its line anchor. Its use is reported as a warning.
 _Avoid_: Retry match, fallback match, out-of-bound match
 
+**Whole-section resolution**:
+Resolution of every hunk in an Update File section against the same pre-edit source before any section edit applies.
+
+**Source-order tie-breaker**:
+A secondary resolution rule over the strongest candidate set that prefers assignments whose complete source spans follow authored hunk order. One span follows another when the earlier span ends before the later span begins; adjacency is allowed. It resolves a tie only when exactly one source-ordered assignment remains; zero or multiple source-ordered assignments remain ambiguous. It does not override a uniquely dominant match.
+
+**Ambiguity group**:
+One or more consecutive hunks whose strongest match evidence leaves tied candidates. The group is resolved jointly using authored source order and the nearest uniquely resolved hunks before and after it as optional positional boundaries.
+
+**Strongest candidate set**:
+The hunk candidates remaining after anchor affinity and selector dominance are applied. Conflict filtering and source-order tie-breaking operate only on this set, regardless of selector type.
+
+**Authored application order**:
+The order in which resolved hunks from an Update File section apply, matching their order in the patch regardless of their source positions.
+
+**Hunk conflict**:
+An overlap between the complete source spans assigned to two hunks in the same Update File section. A hunk conflict invalidates the section regardless of selector dominance or authored order.
+
 **Replace tool**:
 A top-level editing operation for substituting literal text in one file without expressing complete replacement lines.
 
