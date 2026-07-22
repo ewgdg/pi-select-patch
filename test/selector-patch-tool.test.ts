@@ -1237,6 +1237,104 @@ describe("edit visible status", () => {
     await expect(readFile(file, "utf8")).resolves.toBe("target\nboundary\ntarget");
   });
 
+  it.each([
+    ["early", "duplicate\nduplicate\nunique", ["@@", "-:duplicate", "+changed", "@@", "-:unique", "+resolved"]],
+    ["late", "unique\nduplicate\nduplicate", ["@@", "-:unique", "+resolved", "@@", "-:duplicate", "+changed"]],
+  ] as const)("keeps the target unchanged for an unresolved %s ambiguity group", async (_position, initialText, hunks) => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, initialText);
+    const publicationCalls: string[] = [];
+    const tool = createPatchTool("explicit", "strict", {
+      publicationBackend: {
+        async replaceExisting(path) { publicationCalls.push(path); },
+        async createNew(path) { publicationCalls.push(path); },
+      },
+    });
+
+    await expect(tool.execute(
+      "tool-call",
+      { patch: ["*** Update File: file.txt", ...hunks].join("\n") },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    )).rejects.toThrow("[E_AMBIGUOUS_HUNK]");
+
+    await expect(readFile(file, "utf8")).resolves.toBe(initialText);
+    expect(publicationCalls).toEqual([]);
+  });
+
+  it("preserves operation sequencing while resolving every Update section against immutable source", async () => {
+    const dir = await makePlainTempDir();
+    await writeFile(join(dir, "earlier.txt"), "old");
+    const failedTarget = join(dir, "failed.txt");
+    await writeFile(failedTarget, "anchor");
+    const failedOperation = [
+      "*** Update File: failed.txt",
+      "@@",
+      " :anchor",
+      "+inserted",
+      "@@",
+      "-:inserted",
+      "+later",
+    ];
+    const skippedTail = ["*** Add File: skipped.txt", "+skipped"];
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: earlier.txt",
+      "@@",
+      "-:old",
+      "+persisted",
+      ...failedOperation,
+      ...skippedTail,
+      "*** End Patch",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      explicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("[E_PARTIAL_PATCH]");
+    expect(message).toContain("[E_STALE_HUNK]");
+    await expect(readFile(join(dir, "earlier.txt"), "utf8")).resolves.toBe("persisted");
+    await expect(readFile(failedTarget, "utf8")).resolves.toBe("anchor");
+    await expect(stat(join(dir, "skipped.txt"))).rejects.toThrow();
+    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toBe([
+      "*** Begin Patch",
+      ...failedOperation,
+      ...skippedTail,
+      "*** End Patch",
+    ].join("\n"));
+  });
+
+  it("dry_run validates the same immutable-source failure without publishing any operation", async () => {
+    const dir = await makePlainTempDir();
+    await writeFile(join(dir, "earlier.txt"), "old");
+    const failedTarget = join(dir, "failed.txt");
+    await writeFile(failedTarget, "anchor");
+    const publicationCalls: string[] = [];
+    const tool = createPatchTool("explicit", "strict", {
+      publicationBackend: {
+        async replaceExisting(path) { publicationCalls.push(path); },
+        async createNew(path) { publicationCalls.push(path); },
+      },
+    });
+    const patch = [
+      "*** Update File: earlier.txt", "@@", "-:old", "+persisted",
+      "*** Update File: failed.txt", "@@", " :anchor", "+inserted", "@@", "-:inserted", "+later",
+      "*** Add File: skipped.txt", "+skipped",
+    ].join("\n");
+
+    await expect(tool.execute(
+      "tool-call", { patch, dry_run: true }, undefined, undefined, { cwd: dir } as never,
+    )).rejects.toThrow("[E_STALE_HUNK]");
+
+    await expect(readFile(join(dir, "earlier.txt"), "utf8")).resolves.toBe("old");
+    await expect(readFile(failedTarget, "utf8")).resolves.toBe("anchor");
+    await expect(stat(join(dir, "skipped.txt"))).rejects.toThrow();
+    expect(publicationCalls).toEqual([]);
+  });
+
   it("keeps a complete Update section atomic when candidate discovery exhausts", async () => {
     const dir = await makePlainTempDir();
     const file = join(dir, "a.txt");
