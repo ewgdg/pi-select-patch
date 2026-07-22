@@ -146,7 +146,11 @@ Hunk headers:
 - `@@ @<line>` and `@@ @<start>...<end>` use strict hard boundaries by default.
 - Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to recover unique overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
 
-Each `Update File` section resolves and validates every hunk against one immutable pre-edit source before materializing output. Resolved source spans cannot overlap; hunks materialize in authored order and never match earlier inserted output. Consecutive hunks whose strongest candidate sets are tied resolve as one local group: all non-overlapping assignments are considered, then authored source order breaks a tie only when it leaves exactly one complete assignment. A sole non-overlapping assignment applies regardless of order; no such assignment reports conflicting hunks. Use another `*** Update File` section when a later edit must depend on earlier output.
+Each `Update File` section uses **whole-section resolution**: every hunk resolves against one immutable pre-edit source before output materializes. Anchor affinity and selector dominance first produce each hunk's **strongest candidate set**. Consecutive tied hunks form an **ambiguity group**, which is solved from complete source spans rather than only each match's first line. Assignments that overlap another resolved span are **hunk conflicts** and are rejected.
+
+If one conflict-free assignment remains, it applies regardless of source order. If several remain, authored source order is only a tie-breaker and succeeds only when exactly one complete assignment follows the hunk sequence; zero or several ordered assignments remain ambiguous. Candidate limits fail explicitly instead of treating a truncated search as unique. Resolved hunks then materialize in **authored application order**, even when uniquely resolved source positions differ from that order, and cannot match output inserted by an earlier hunk. Use another `*** Update File` section when a later edit must depend on earlier output.
+
+Author hunks in source order when practical so repeated matches provide useful positional evidence. This is a recommendation, not a syntax rule: uniquely resolved hunks may still apply when their source positions differ from authored order.
 
 ## Failure behavior
 

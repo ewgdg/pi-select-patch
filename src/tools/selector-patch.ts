@@ -525,6 +525,7 @@ function buildPatchPromptGuidelines(profile: SelectorPatchProfile): string[] {
       <edit_tool_policy>
       Start with the smallest set of short selectors that can uniquely identify the hunk.
       Minimize selector text and unnecessary selector rows; surrounding short context provides safety without copied full lines.
+      Author hunks in source order when practical so tied strongest candidates can use positional evidence. This is a recommendation, not a constraint: uniquely resolved hunks may still apply when their source positions differ from authored order.
       ${buildPatchProfilePromptGuideline(profile)}
       ${profile === "explicit" ? "Explicit profile supports selector markers (`:`, `^`, `*`, `$`, `?`, `~`, and hash `#` when hash receipt is enabled)." : "Profile controls context/delete row parsing; no per-call row-parsing override exists."}
       ${buildPatchProfilePolicy(profile)}

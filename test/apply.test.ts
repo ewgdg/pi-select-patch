@@ -487,6 +487,40 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
   });
 
+  it.each([
+    ["exact", (text: string) => `:${text}`],
+    ["hash", (text: string) => `#${hashLine(text)}`],
+    ["prefix", (text: string) => `^${text.split(" ")[0]}`],
+    ["suffix", (text: string) => `$${text.split(" ")[1]}`],
+    ["contains", (text: string) => `*${text.slice(2, -2)}`],
+    ["combined", (text: string) => `?${JSON.stringify({ prefix: text.split(" ")[0], suffix: text.split(" ")[1] })}`],
+    ["unified-diff", (text: string) => text],
+    ["smart", (text: string) => `~${text}`],
+  ] as const)("uses the same source-order rule for %s selectors", (_kind, selector) => {
+    const hunk = (first: string, second: string, replacement: string) => [
+      "@@",
+      `-${selector(first)}`,
+      `-${selector(second)}`,
+      `+${replacement}`,
+    ];
+    const multi = [
+      ...hunk("alpha head", "shared middle", "first"),
+      ...hunk("shared middle", "beta tail", "second"),
+    ].join("\n");
+
+    const result = applyPatchToText(
+      "alpha head\nshared middle\nbeta tail\nalpha head\nshared middle\nbeta tail",
+      multi,
+    );
+
+    expect(result.text).toBe("first\nbeta tail\nalpha head\nsecond");
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
+    expect(result.hunkAudits.map((audit) => audit.orderResolution?.selectedSpan)).toEqual([
+      { startLine: 1, endLine: 2 },
+      { startLine: 5, endLine: 6 },
+    ]);
+  });
+
   it("records order resolution for each hunk selected by authored source order", () => {
     const multi = ["@@", "-~a", "-~x", "+first", "@@", "-~x", "-~b", "+second"].join("\n");
 

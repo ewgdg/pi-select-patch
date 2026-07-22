@@ -364,6 +364,48 @@ describe("edit visible status", () => {
     await expect(readFile(dryRunFile, "utf8")).resolves.toBe("a\nx\nb\na\nx\nb");
   });
 
+  it.each([
+    ["explicit", explicitPatchTool, (content: string) => `:${content}`],
+    ["smart", smartPatchTool, (content: string) => content],
+    ["hash", hashPatchTool, (content: string) => hashLine(content)],
+  ] as const)("uses equivalent source-order ambiguity semantics in the %s profile", async (_profile, tool, selector) => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "file.txt");
+    const deleteRow = (content: string) => `-${selector(content)}`;
+    await writeFile(file, "a\nx\nb\na\nx\nb");
+
+    const result = await tool.execute(
+      "tool-call",
+      {
+        patch: [
+          "*** Update File: file.txt",
+          "@@", deleteRow("a"), deleteRow("x"), "+first",
+          "@@", deleteRow("x"), deleteRow("b"), "+second",
+        ].join("\n"),
+      },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toContain("*** Update File: file.txt");
+    expectNoSourceOrderWarning(resultText(result));
+    expect(detailsHunkAudits(result).map((audit) => audit.orderResolution)).toEqual([
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 1, endLine: 2 } },
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 5, endLine: 6 } },
+    ]);
+    await expect(readFile(file, "utf8")).resolves.toBe("first\nb\na\nsecond");
+
+    await writeFile(file, "target\ntarget");
+    await expect(tool.execute(
+      "tool-call",
+      { patch: ["*** Update File: file.txt", "@@", deleteRow("target")].join("\n") },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    )).rejects.toThrow("[E_AMBIGUOUS_HUNK]");
+  });
+
   it("keeps tolerated-boundary warnings unchanged when they order-resolve a following hunk", async () => {
     const dir = await makeExplicitTempDir();
     const file = join(dir, "file.txt");
@@ -462,6 +504,20 @@ describe("edit visible status", () => {
     expect(guideline).toContain("Use range selector whenever possible");
     expect(guideline).not.toContain("<important>");
     expect(guideline).toContain("</edit_tool_policy>");
+  });
+
+  it.each([
+    ["explicit", explicitPatchTool],
+    ["smart", smartPatchTool],
+    ["hash", hashPatchTool],
+  ] as const)("gives source-order authoring guidance in the %s profile without exposing a switch", (_profile, tool) => {
+    const guideline = tool.promptGuidelines?.[0] ?? "";
+    const parameterProperties = (tool.parameters as { properties: Record<string, unknown> }).properties;
+
+    expect(guideline).toContain("Author hunks in source order when practical");
+    expect(guideline).toContain("uniquely resolved hunks may still apply when their source positions differ from authored order");
+    expect(parameterProperties).not.toHaveProperty("profile");
+    expect(Object.keys(parameterProperties).join(" ")).not.toMatch(/order|tie.?break/i);
   });
 
   it("is agent-visible as a hash receipt without selector cost metric", async () => {
@@ -1262,6 +1318,37 @@ describe("edit visible status", () => {
 
     await expect(readFile(file, "utf8")).resolves.toBe(initialText);
     expect(publicationCalls).toEqual([]);
+  });
+
+  it("renders bounded ambiguity-group diagnostics and preserves the authored operation for retry", async () => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "file.txt");
+    const alpha = "alpha selector text must stay private";
+    const shared = "shared selector text must stay private";
+    const beta = "beta selector text must stay private";
+    const initialText = Array.from({ length: 3 }, () => [alpha, shared, beta]).flat().join("\n");
+    const patch = [
+      "*** Update File: file.txt",
+      "@@", `-:${alpha}`, `-:${shared}`, "+first",
+      "@@", `-:${shared}`, `-:${beta}`, "+second",
+    ].join("\n");
+    await writeFile(file, initialText);
+
+    const message = await rejectionMessage(
+      explicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("[E_AMBIGUOUS_HUNK] Line 3:");
+    expect(message).toContain("Ambiguity group hunks 1...2");
+    expect(message).toContain("patch input lines 3...9");
+    expect(message).toContain("candidates hunk 1=[1...2,4...5,7...8]");
+    expect(message).toContain("hunk 2=[2...3,5...6,8...9]");
+    expect(message).toContain("source-ordered assignments: 2+");
+    expect(message).not.toContain(alpha);
+    expect(message).not.toContain(shared);
+    expect(message).not.toContain(beta);
+    await expect(readFile(file, "utf8")).resolves.toBe(initialText);
+    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toBe(patch);
   });
 
   it("preserves operation sequencing while resolving every Update section against immutable source", async () => {
