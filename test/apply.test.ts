@@ -713,6 +713,36 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText(Array.from({ length: 14 }, () => "x").join("\n"), multi)).toThrow(AmbiguousHunkError);
   });
 
+  it("fails explicitly with bounded diagnostics when reverse-order assignment search exhausts its budget", () => {
+    const candidateCount = 1_000;
+    const text = [
+      ...Array.from({ length: candidateCount }, () => "upper candidate"),
+      ...Array.from({ length: candidateCount }, () => "lower candidate"),
+    ].join("\n");
+    const multi = [
+      "@@", "-:lower candidate", "+lower replacement",
+      "@@", "-:upper candidate", "+upper replacement",
+    ].join("\n");
+
+    let thrown: unknown;
+    try {
+      applyPatchToText(text, multi);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(HunkCandidateLimitError);
+    const message = thrown instanceof Error ? thrown.message : String(thrown);
+    expect(message).toContain("[E_HUNK_CANDIDATE_LIMIT]");
+    expect(message).toContain("assignment search exceeded state limit (100000; explored 100001+");
+    expect(message).toContain("patch input lines 2...6");
+    expect(message).toContain("hunk 1=[1001...1001,1002...1002,1003...1003,1004...1004,...]");
+    expect(message).toContain("hunk 2=[1...1,2...2,3...3,4...4,...]");
+    expect(message).not.toContain("lower candidate");
+    expect(message).not.toContain("upper candidate");
+    expect(message.length).toBeLessThan(700);
+  });
+
   it("resolves deep ambiguity groups iteratively without exhausting the call stack", () => {
     const hunkCount = 10_000;
     const text = Array.from({ length: hunkCount }, (_value, index) => [`item-${index}`, `item-${index}`]).flat().join("\n");
@@ -735,6 +765,13 @@ describe("applyPatchToText", () => {
     expect(() => applyPatchToText(text, anchoredRangePatch(1, 1_001, "-:x"), { anchorMode: "tolerant" })).toThrow("[E_HUNK_CANDIDATE_LIMIT] Line 2:");
     expect(patchInput).toEqual({ hunks: [{ ops: [{ kind: "delete", content: "x" }] }] });
     expect(applyPatchToText("x", patch("-:x")).text).toBe("");
+  });
+
+  it("keeps stale, ambiguous, conflicting, and exhausted searches distinguishable", () => {
+    expect(() => applyPatchToText("present", patch("-:missing"))).toThrow("[E_STALE_HUNK]");
+    expect(() => applyPatchToText("x\nx", patch("-:x"))).toThrow("[E_AMBIGUOUS_HUNK]");
+    expect(() => applyPatchToText("x", [patch("-:x"), patch("-:x")].join("\n"))).toThrow("[E_CONFLICTING_HUNKS]");
+    expect(() => applyPatchToText(Array.from({ length: 1_001 }, () => "x").join("\n"), patch("-:x"))).toThrow("[E_HUNK_CANDIDATE_LIMIT]");
   });
 
   it("reports cross-group source-span reuse as conflicting hunks before materialization", () => {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hashLine, parseText } from "../src/api.js";
+import { getVisibleOutputOverflow } from "../src/output-size.js";
 import { directTextFilePublicationBackend } from "../src/text-file-publication.js";
 import { createPatchTool } from "../src/tools/selector-patch.js";
 
@@ -1152,6 +1153,135 @@ describe("edit visible status", () => {
       smartPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
     ).rejects.toThrow("[E_STALE_HUNK]");
     await expect(readFile(file, "utf8")).resolves.toBe("target\nboundary\ntarget");
+  });
+
+  it("keeps a complete Update section atomic when candidate discovery exhausts", async () => {
+    const dir = await makePlainTempDir();
+    const file = join(dir, "a.txt");
+    const candidate = "candidate text that must not appear in diagnostics";
+    await writeFile(file, ["header", ...Array.from({ length: 1_001 }, () => candidate)].join("\n"));
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: a.txt",
+      "@@",
+      " header",
+      "+marker",
+      "@@",
+      `-${candidate}`,
+      "+replacement",
+      "*** End Patch",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      smartPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("[E_PARTIAL_PATCH]");
+    expect(message).toContain("[E_HUNK_CANDIDATE_LIMIT] Line 7:");
+    expect(message).toContain("discovered 1001+");
+    expect(message).not.toContain(candidate);
+    await expect(readFile(file, "utf8")).resolves.toBe(
+      ["header", ...Array.from({ length: 1_001 }, () => candidate)].join("\n"),
+    );
+  });
+
+  it("bounds applied and skipped operation headers in partial-patch diagnostics", async () => {
+    const dir = await makePlainTempDir();
+    await writeFile(join(dir, "a.txt"), "present");
+    const selector = "missing selector text that must not appear in diagnostics";
+    const appliedOperations = Array.from({ length: 5 }, (_value, index) => [
+      `*** Add File: applied-${index}.txt`,
+      "+applied",
+    ]).flat();
+    const skippedOperations = Array.from({ length: 5 }, (_value, index) => [
+      `*** Add File: skipped-${index}.txt`,
+      "+skipped",
+    ]).flat();
+    const patch = [
+      "*** Begin Patch",
+      ...appliedOperations,
+      "*** Update File: a.txt",
+      "@@",
+      `-${selector}`,
+      "+replacement",
+      ...skippedOperations,
+      "*** End Patch",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      smartPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("*** Add File: applied-0.txt");
+    expect(message).toContain("*** Add File: applied-3.txt");
+    expect(message).toContain("... 1 applied operation omitted.");
+    expect(message).not.toContain("*** Add File: applied-4.txt");
+    expect(message).toContain("*** Add File: skipped-0.txt");
+    expect(message).toContain("*** Add File: skipped-3.txt");
+    expect(message).toContain("... 1 skipped operation omitted.");
+    expect(message).not.toContain("*** Add File: skipped-4.txt");
+    expect(message).not.toContain(selector);
+    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toContain(
+      "*** Add File: skipped-4.txt",
+    );
+  });
+
+  it("bounds tolerated-match warnings in partial-patch diagnostics", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "a.txt");
+    const warningCount = 1_001;
+    await writeFile(
+      file,
+      Array.from({ length: warningCount }, (_value, index) => `target-${index}`).join("\n"),
+    );
+    const updateHunks = Array.from({ length: warningCount }, (_value, index) => [
+      `@@ @${warningCount + 1}...${warningCount + 1}`,
+      ` :target-${index}`,
+    ].join("\n"));
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: a.txt",
+      ...updateHunks,
+      "*** Add File: missing-parent/failure.txt",
+      "+failure",
+      "*** End Patch",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      tolerantExplicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("WARNING: Hunk 1 used tolerated outside match");
+    expect(message).toContain(`... ${warningCount - 4} tolerated match warnings omitted.`);
+    expect(message).not.toContain("WARNING: Hunk 5 used tolerated outside match");
+    expect(getVisibleOutputOverflow(message)).toBeUndefined();
+    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toContain(
+      "*** Add File: missing-parent/failure.txt",
+    );
+  });
+
+  it("bounds long raw operation paths in partial-patch diagnostics", async () => {
+    const dir = await makePlainTempDir();
+    const normalizedSafePath = (leaf: string) => `${"x/../".repeat(12_000)}${leaf}`;
+    const failedPath = normalizedSafePath("missing-parent/failure.txt");
+    const skippedPath = normalizedSafePath("skipped.txt");
+    const retryPatch = [
+      "*** Begin Patch",
+      `*** Add File: ${failedPath}`,
+      "+failure",
+      `*** Add File: ${skippedPath}`,
+      "+skipped",
+      "*** End Patch",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      smartPatchTool.execute("tool-call", { patch: retryPatch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(getVisibleOutputOverflow(message)).toBeUndefined();
+    expect(message).toContain("partial-patch diagnostic truncated");
+    expect(message).not.toContain(failedPath);
+    await expect(readFile(retryPatchPathFrom(message), "utf8")).resolves.toBe(retryPatch);
   });
 
   it("omits stale hunk numbers because they are local to each Update section", async () => {

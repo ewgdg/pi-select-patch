@@ -44,6 +44,8 @@ import { type PatchSizeComparison } from "../patch-size.js";
 import {
   countRenderedLines,
   getVisibleOutputOverflow,
+  LLM_VISIBLE_OUTPUT_MAX_BYTES,
+  LLM_VISIBLE_OUTPUT_MAX_LINES,
   type VisibleOutputOverflow,
 } from "../output-size.js";
 import { type ParsePatchOptions } from "../patch-format.js";
@@ -363,6 +365,9 @@ const PATCH_PROFILE_DEFAULTS: Record<
   smart: { receipt: "status" },
   hash: { receipt: "hash" },
 };
+const SEQUENTIAL_FAILURE_DIAGNOSTIC_LIST_LIMIT = 4;
+const PARTIAL_PATCH_ERROR_PREFIX = "[E_PARTIAL_PATCH] ";
+const SEQUENTIAL_FAILURE_TRUNCATION_MARKER = "... partial-patch diagnostic truncated; see retry patch for complete failed tail.";
 
 export function createPatchTool(
   profile: SelectorPatchProfile,
@@ -812,6 +817,7 @@ function renderSequentialFailureMessage(args: {
   retryPatch: { path?: string; error?: unknown };
   cause: unknown;
 }): string {
+  const retryPatchStatus = renderRetryPatchStatus(args.retryPatch);
   const sections = [
     `Edit stopped after ${args.appliedChanges.length} applied operation${args.appliedChanges.length === 1 ? "" : "s"}.`,
     "Applied:",
@@ -820,9 +826,8 @@ function renderSequentialFailureMessage(args: {
     `${renderOperationHeader(args.failedOperation)}\n${formatCause(args.cause)}`,
     "Skipped:",
     renderOperationList(args.skippedOperations),
-    renderRetryPatchStatus(args.retryPatch),
   ];
-  return sections.join("\n");
+  return renderBoundedSequentialFailureMessage(sections.join("\n"), retryPatchStatus);
 }
 
 function renderRetryPatchStatus(retryPatch: { path?: string; error?: unknown }): string {
@@ -830,27 +835,108 @@ function renderRetryPatchStatus(retryPatch: { path?: string; error?: unknown }):
   return `Retry patch unavailable: ${formatCause(retryPatch.error)}`;
 }
 
+function renderBoundedSequentialFailureMessage(head: string, retryPatchStatus: string): string {
+  const fullDetail = [head, retryPatchStatus].join("\n");
+  if (!getVisibleOutputOverflow(`${PARTIAL_PATCH_ERROR_PREFIX}${fullDetail}`)) return fullDetail;
+
+  const boundedRetryPatchStatus = truncateVisiblePrefix(
+    retryPatchStatus,
+    LLM_VISIBLE_OUTPUT_MAX_BYTES
+      - Buffer.byteLength(PARTIAL_PATCH_ERROR_PREFIX, "utf8")
+      - Buffer.byteLength(SEQUENTIAL_FAILURE_TRUNCATION_MARKER, "utf8")
+      - 1,
+    LLM_VISIBLE_OUTPUT_MAX_LINES - 1,
+  );
+  const tail = [SEQUENTIAL_FAILURE_TRUNCATION_MARKER, boundedRetryPatchStatus]
+    .filter((part) => part.length > 0)
+    .join("\n");
+  const boundedHead = truncateVisiblePrefix(
+    head,
+    LLM_VISIBLE_OUTPUT_MAX_BYTES
+      - Buffer.byteLength(PARTIAL_PATCH_ERROR_PREFIX, "utf8")
+      - Buffer.byteLength(tail, "utf8")
+      - 1,
+    LLM_VISIBLE_OUTPUT_MAX_LINES - countRenderedLines(tail),
+  );
+
+  return [boundedHead, tail].filter((part) => part.length > 0).join("\n");
+}
+
+function truncateVisiblePrefix(text: string, maxBytes: number, maxLines: number): string {
+  if (maxBytes <= 0 || maxLines <= 0) return "";
+  const lineBounded = text.split("\n").slice(0, maxLines).join("\n");
+  let byteLength = 0;
+  let endOffset = 0;
+  for (const character of lineBounded) {
+    const characterByteLength = Buffer.byteLength(character, "utf8");
+    if (byteLength + characterByteLength > maxBytes) break;
+    byteLength += characterByteLength;
+    endOffset += character.length;
+  }
+  return lineBounded.slice(0, endOffset);
+}
+
 function renderAppliedOperationList(
   changes: readonly PlannedFileChange[],
 ): string {
-  if (changes.length === 0) {
-    return "(none)";
-  }
-  return changes
-    .flatMap((change) => [
+  return renderBoundedSequentialFailureOperations(
+    changes,
+    "applied operation",
+    (change) => [
       `*** ${capitalizeOperation(change.operation)} File: ${change.patchPath}`,
-      ...renderToleratedMatchWarnings(change),
-    ])
-    .join("\n");
+      ...renderBoundedToleratedMatchWarnings(change),
+    ].join("\n"),
+  );
 }
 
 function renderOperationList(
   operations: readonly UniversalPatchOperation[],
 ): string {
-  if (operations.length === 0) {
-    return "(none)";
+  return renderBoundedSequentialFailureOperations(
+    operations,
+    "skipped operation",
+    renderOperationHeader,
+  );
+}
+
+function renderBoundedSequentialFailureOperations<T>(
+  operations: readonly T[],
+  label: "applied operation" | "skipped operation",
+  renderOperation: (operation: T) => string,
+): string {
+  if (operations.length === 0) return "(none)";
+
+  return renderBoundedSequentialFailureItems(
+    operations,
+    label,
+    renderOperation,
+  ).join("\n");
+}
+
+function renderBoundedToleratedMatchWarnings(change: PlannedFileChange): string[] {
+  return renderBoundedSequentialFailureItems(
+    renderToleratedMatchWarnings(change),
+    "tolerated match warning",
+    (warning) => warning,
+  );
+}
+
+function renderBoundedSequentialFailureItems<T>(
+  items: readonly T[],
+  label: string,
+  renderItem: (item: T) => string,
+): string[] {
+  // A failed multi-file patch must not turn its operation lists or warnings into unbounded diagnostics.
+  const rendered = items
+    .slice(0, SEQUENTIAL_FAILURE_DIAGNOSTIC_LIST_LIMIT)
+    .map(renderItem);
+  const omittedCount = items.length - rendered.length;
+  if (omittedCount > 0) {
+    rendered.push(
+      `... ${omittedCount} ${label}${omittedCount === 1 ? "" : "s"} omitted.`,
+    );
   }
-  return operations.map(renderOperationHeader).join("\n");
+  return rendered;
 }
 
 function renderOperationHeader(operation: UniversalPatchOperation): string {
