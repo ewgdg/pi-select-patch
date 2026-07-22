@@ -512,6 +512,43 @@ describe("applyPatchToText", () => {
     ]);
   });
 
+  it("uses source order to resolve a Pareto tradeoff in smart candidates", () => {
+    const ambiguousHunk = ["@@", "-~alpha", "-~beta", "+chosen"].join("\n");
+    const multi = [
+      "@@", "-~alpha", "-~beta", "+chosen",
+      "@@", "-:marker", "+boundary"
+    ].join("\n");
+    const text = "alpha\nx beta y\nmarker\nx alpha y\nbeta";
+
+    expect(() => applyPatchToText(text, ambiguousHunk)).toThrow(AmbiguousHunkError);
+
+    const result = applyPatchToText(text, multi);
+
+    expect(result.text).toBe("chosen\nboundary\nx alpha y\nbeta");
+    expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
+    expect(result.hunkAudits[0].orderAssisted?.selectedSpans).toEqual([
+      { hunkIndex: 1, startLine: 1, endLine: 2 }
+    ]);
+  });
+
+  it("applies one ambiguity-group assignment rule to mixed fixed and smart hunks", () => {
+    const multi = ["@@", "-:a", "-:x", "+fixed", "@@", "-~x", "-~b", "+smart"].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
+
+    expect(result.text).toBe("fixed\nb\na\nsmart");
+    expect(result.hunkAudits.map((audit) => audit.orderAssisted?.selectedSpans)).toEqual([
+      [
+        { hunkIndex: 1, startLine: 1, endLine: 2 },
+        { hunkIndex: 2, startLine: 5, endLine: 6 }
+      ],
+      [
+        { hunkIndex: 1, startLine: 1, endLine: 2 },
+        { hunkIndex: 2, startLine: 5, endLine: 6 }
+      ]
+    ]);
+  });
+
   it("uses authored order to resolve a consecutive sparse-hunk group", () => {
     const multi = ["@@", "-:a", "-...", "-:b", "+first", "@@", "-:mid", "+second"].join("\n");
 
@@ -537,6 +574,23 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits.map((audit) => audit.anchorResolution?.affinity)).toEqual(["overlapping", "overlapping"]);
   });
 
+  it("uses a uniquely tolerated hunk as a boundary without dropping its warning metadata", () => {
+    const multi = [
+      "@@ @3", "-:marker", "+moved",
+      "@@", "-:target", "+selected"
+    ].join("\n");
+
+    const result = applyPatchToText("target\nmarker\ntarget", multi, { anchorMode: "tolerant" });
+
+    expect(result.text).toBe("target\nmoved\nselected");
+    expect(result.hunkAudits[0].anchorResolution).toEqual({
+      affinity: "outside",
+      authoredAnchor: { startLine: 3 },
+      resolvedMatch: { startLine: 2, endLine: 2 }
+    });
+    expect(result.hunkAudits[1].matchStart).toBe(2);
+  });
+
   it("keeps a stronger smart candidate ahead of authored source order", () => {
     const multi = ["@@", "-~alpha", "@@", "-:target"].join("\n");
 
@@ -545,6 +599,27 @@ describe("applyPatchToText", () => {
     expect(result.text).toBe("alpha extra\ntarget");
     expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([2, 3]);
     expect(result.hunkAudits[0].matcherKinds).toEqual(["exact"]);
+  });
+
+  it("does not revive a dominated smart candidate to avoid a fixed-hunk conflict", () => {
+    const multi = [
+      "@@", "-~alpha", "+smart",
+      "@@", "-:alpha", "+fixed"
+    ].join("\n");
+
+    expect(() => applyPatchToText("alpha\nalpha extra", multi)).toThrow(ConflictingHunksError);
+  });
+
+  it("keeps strict anchor boundaries ahead of source-order assistance", () => {
+    const multi = [
+      "@@ @4", "-:a", "-:x", "+anchored",
+      "@@", "-:x", "-:b", "+ordered"
+    ].join("\n");
+
+    const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
+
+    expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([3, 1]);
+    expect(result.text).toBe("a\nordered\nanchored\nb");
   });
 
   it("keeps a contained tolerant candidate ahead of source-order assistance", () => {

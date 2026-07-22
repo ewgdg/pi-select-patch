@@ -873,6 +873,17 @@ function findStrongestHunkCandidates(
   matchOps: readonly MatchPatchOp[],
   search: HunkMatchSearch
 ): ResolvedHunkMatch[] {
+  const candidates = findHunkCandidates(entries, hunk, matchOps, search);
+  if (!hunkHasSmartSelector(hunk)) return candidates;
+  return nonDominatedSmartCandidates(candidates, smartOpIndexes(hunk.ops));
+}
+
+function findHunkCandidates(
+  entries: CurrentLineEntry[],
+  hunk: Hunk,
+  matchOps: readonly MatchPatchOp[],
+  search: HunkMatchSearch
+): ResolvedHunkMatch[] {
   const searchEnd = search.end ?? entries.length;
   const errorScope = search.errorScope ?? renderAnchorSearchScope(hunk);
   const matchFilter = search.matchFilter ?? (() => true);
@@ -894,7 +905,7 @@ function findStrongestHunkCandidates(
   if (candidates.length > HUNK_CANDIDATE_LIMIT) {
     throw new HunkCandidateLimitError(renderHunkCandidateLimitDetail(hunk, errorScope, candidates.map((candidate) => candidate.match)), hunkErrorLocation(hunk));
   }
-  return nonDominatedSmartCandidates(candidates, smartOpIndexes(hunk.ops));
+  return candidates;
 }
 
 function findTolerantHunkCandidates(
@@ -906,8 +917,13 @@ function findTolerantHunkCandidates(
   if (!anchor) return [];
 
   for (const affinity of ["contained", "overlapping", "outside"] as const) {
-    const candidates = findStrongestHunkCandidates(entries, hunk, matchOps, anchorAffinitySearch(hunk, entries.length, affinity));
-    if (candidates.length === 0) continue;
+    // Anchor affinity is selected from the complete eligible class before
+    // smart dominance can discard candidates or group solving can filter them.
+    const eligibleCandidates = findHunkCandidates(entries, hunk, matchOps, anchorAffinitySearch(hunk, entries.length, affinity));
+    if (eligibleCandidates.length === 0) continue;
+    const candidates = hunkHasSmartSelector(hunk)
+      ? nonDominatedSmartCandidates(eligibleCandidates, smartOpIndexes(hunk.ops))
+      : eligibleCandidates;
     if (affinity === "contained") return candidates;
     return candidates.map((candidate) => ({
       ...candidate,
