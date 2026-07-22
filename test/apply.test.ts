@@ -27,6 +27,7 @@ describe("applyPatchToText", () => {
       ["@@ result", ` ${hashLine("a")}`, `+${hashLine("new")}`, ` ${hashLine("z")}`].join("\n")
     );
     expect(result.renderedReceipt).not.toContain(hashLine("old"));
+    expect(result.hunkAudits[0].orderResolution).toBeUndefined();
   });
 
   it("deletes and inserts using exact unique hash sequence", () => {
@@ -486,28 +487,22 @@ describe("applyPatchToText", () => {
     expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
   });
 
-  it("uses authored order to resolve a consecutive smart-hunk group", () => {
+  it("records order resolution for each hunk selected by authored source order", () => {
     const multi = ["@@", "-~a", "-~x", "+first", "@@", "-~x", "-~b", "+second"].join("\n");
 
     const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
 
     expect(result.text).toBe("first\nb\na\nsecond");
-    expect(result.hunkAudits.map((audit) => audit.orderAssisted)).toEqual([
+    expect(result.hunkAudits.map((audit) => audit.orderResolution)).toEqual([
       {
         groupStartHunk: 1,
         groupEndHunk: 2,
-        selectedSpans: [
-          { hunkIndex: 1, startLine: 1, endLine: 2 },
-          { hunkIndex: 2, startLine: 5, endLine: 6 }
-        ]
+        selectedSpan: { startLine: 1, endLine: 2 }
       },
       {
         groupStartHunk: 1,
         groupEndHunk: 2,
-        selectedSpans: [
-          { hunkIndex: 1, startLine: 1, endLine: 2 },
-          { hunkIndex: 2, startLine: 5, endLine: 6 }
-        ]
+        selectedSpan: { startLine: 5, endLine: 6 }
       }
     ]);
   });
@@ -526,9 +521,7 @@ describe("applyPatchToText", () => {
 
     expect(result.text).toBe("chosen\nboundary\nx alpha y\nbeta");
     expect(result.hunkAudits[0].matcherKinds).toEqual(["exact", "contains"]);
-    expect(result.hunkAudits[0].orderAssisted?.selectedSpans).toEqual([
-      { hunkIndex: 1, startLine: 1, endLine: 2 }
-    ]);
+    expect(result.hunkAudits[0].orderResolution?.selectedSpan).toEqual({ startLine: 1, endLine: 2 });
   });
 
   it("applies one ambiguity-group assignment rule to mixed fixed and smart hunks", () => {
@@ -537,15 +530,9 @@ describe("applyPatchToText", () => {
     const result = applyPatchToText("a\nx\nb\na\nx\nb", multi);
 
     expect(result.text).toBe("fixed\nb\na\nsmart");
-    expect(result.hunkAudits.map((audit) => audit.orderAssisted?.selectedSpans)).toEqual([
-      [
-        { hunkIndex: 1, startLine: 1, endLine: 2 },
-        { hunkIndex: 2, startLine: 5, endLine: 6 }
-      ],
-      [
-        { hunkIndex: 1, startLine: 1, endLine: 2 },
-        { hunkIndex: 2, startLine: 5, endLine: 6 }
-      ]
+    expect(result.hunkAudits.map((audit) => audit.orderResolution?.selectedSpan)).toEqual([
+      { startLine: 1, endLine: 2 },
+      { startLine: 5, endLine: 6 }
     ]);
   });
 
@@ -556,9 +543,9 @@ describe("applyPatchToText", () => {
 
     expect(result.text).toBe("first\na\nsecond\nb");
     expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([0, 4]);
-    expect(result.hunkAudits[0].orderAssisted?.selectedSpans).toEqual([
-      { hunkIndex: 1, startLine: 1, endLine: 3 },
-      { hunkIndex: 2, startLine: 5, endLine: 5 }
+    expect(result.hunkAudits.map((audit) => audit.orderResolution?.selectedSpan)).toEqual([
+      { startLine: 1, endLine: 3 },
+      { startLine: 5, endLine: 5 }
     ]);
   });
 
@@ -572,6 +559,18 @@ describe("applyPatchToText", () => {
 
     expect(result.text).toBe("a\nfirst\nb\na\nx\nsecond");
     expect(result.hunkAudits.map((audit) => audit.anchorResolution?.affinity)).toEqual(["overlapping", "overlapping"]);
+    expect(result.hunkAudits.map((audit) => audit.orderResolution)).toEqual([
+      {
+        groupStartHunk: 1,
+        groupEndHunk: 2,
+        selectedSpan: { startLine: 1, endLine: 2 },
+      },
+      {
+        groupStartHunk: 1,
+        groupEndHunk: 2,
+        selectedSpan: { startLine: 5, endLine: 6 },
+      },
+    ]);
   });
 
   it("uses a uniquely tolerated hunk as a boundary without dropping its warning metadata", () => {
@@ -793,6 +792,7 @@ describe("applyPatchToText", () => {
 
     expect(result.text).toBe("a\nsecond\nfirst");
     expect(result.hunkAudits.map((audit) => audit.matchStart)).toEqual([3, 1]);
+    expect(result.hunkAudits.map((audit) => audit.orderResolution)).toEqual([undefined, undefined]);
   });
 
   it("resolves multiple independent ambiguous fixed-hunk groups in one section", () => {

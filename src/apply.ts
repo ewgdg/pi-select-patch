@@ -46,16 +46,15 @@ export interface ToleratedAnchorResolution {
   resolvedMatch: { startLine: number; endLine: number };
 }
 
-export interface OrderAssistedHunkSpan {
-  hunkIndex: number;
+export interface OrderResolutionSpan {
   startLine: number;
   endLine: number;
 }
 
-export interface OrderAssistedResolution {
+export interface OrderResolution {
   groupStartHunk: number;
   groupEndHunk: number;
-  selectedSpans: OrderAssistedHunkSpan[];
+  selectedSpan: OrderResolutionSpan;
 }
 
 export interface PatchHunkAudit {
@@ -73,7 +72,7 @@ export interface PatchHunkAudit {
   insertedHashes: string[];
   deletedHashes: string[];
   anchorResolution?: ToleratedAnchorResolution;
-  orderAssisted?: OrderAssistedResolution;
+  orderResolution?: OrderResolution;
 }
 
 export interface ApplyPatchResult {
@@ -118,7 +117,7 @@ interface ResolvedHunkMatch {
   smartMatcherKinds: Map<number, PatchMatcherKind>;
   smartMatcherEditCosts: Map<number, number>;
   anchorResolution?: ToleratedAnchorResolution;
-  orderAssisted?: OrderAssistedResolution;
+  orderResolution?: OrderResolution;
 }
 
 interface HunkMatchSearch {
@@ -298,7 +297,7 @@ function resolveAmbiguityGroups(
     }
 
     let selected = conflictFree.assignment;
-    let orderAssisted = false;
+    let resolvedBySourceOrder = false;
     if (conflictFree.cardinality === "many") {
       const previousBoundary = findNearestResolvedMatch(resolutions, groupStart - 1, -1);
       const nextBoundary = findNearestResolvedMatch(resolutions, groupEnd, 1);
@@ -324,14 +323,14 @@ function resolveAmbiguityGroups(
         throw new AmbiguousHunkError(renderAmbiguousGroupDetail(group, ordered.cardinality), hunkErrorLocation(first.hunk));
       }
       selected = ordered.assignment;
-      orderAssisted = true;
+      resolvedBySourceOrder = true;
     }
 
     if (!selected) throw new Error("Internal patch error: missing ambiguity-group assignment.");
-    const orderAssistance = orderAssisted ? createOrderAssistedResolution(group, selected) : undefined;
+    const orderResolutions = resolvedBySourceOrder ? createOrderResolutions(group, selected) : undefined;
     for (const [offset, candidate] of selected.entries()) {
       const ambiguous = group[offset];
-      const match = orderAssistance ? { ...candidate, orderAssisted: orderAssistance } : candidate;
+      const match = orderResolutions ? { ...candidate, orderResolution: orderResolutions[offset] } : candidate;
       validateResolvedReplaceRows(sourceLines, ambiguous.hunk, ambiguous.hunkIndex, match.match);
       resolutions[groupStart + offset] = { hunk: ambiguous.hunk, hunkIndex: ambiguous.hunkIndex, match };
     }
@@ -419,19 +418,18 @@ function matchesOverlap(left: ResolvedHunkMatch, right: ResolvedHunkMatch): bool
   return left.match.start < right.match.end && right.match.start < left.match.end;
 }
 
-function createOrderAssistedResolution(
+function createOrderResolutions(
   group: readonly AmbiguousSectionHunk[],
   selected: readonly ResolvedHunkMatch[]
-): OrderAssistedResolution {
-  return {
+): OrderResolution[] {
+  return selected.map((candidate) => ({
     groupStartHunk: group[0].hunkIndex,
     groupEndHunk: group.at(-1)!.hunkIndex,
-    selectedSpans: selected.map((candidate, index) => ({
-      hunkIndex: group[index].hunkIndex,
+    selectedSpan: {
       startLine: candidate.match.start + 1,
       endLine: candidate.match.end
-    }))
-  };
+    }
+  }));
 }
 
 function renderConflictingGroupDetail(group: readonly AmbiguousSectionHunk[]): string {
@@ -657,7 +655,7 @@ function applyHunk(
       insertedHashes,
       deletedHashes,
       ...(resolvedMatch.anchorResolution ? { anchorResolution: resolvedMatch.anchorResolution } : {}),
-      ...(resolvedMatch.orderAssisted ? { orderAssisted: resolvedMatch.orderAssisted } : {})
+      ...(resolvedMatch.orderResolution ? { orderResolution: resolvedMatch.orderResolution } : {})
     }
   };
 }

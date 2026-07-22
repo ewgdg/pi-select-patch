@@ -10,4 +10,4 @@ Within one Update File section, resolve every hunk against the same pre-edit sou
 - One valid non-overlapping assignment succeeds regardless of order; with multiple valid assignments, exactly one source-ordered assignment succeeds, while zero or multiple ordered assignments remain ambiguous.
 - No conflict-free assignment reports conflicting hunks. Candidate truncation cannot establish uniqueness.
 - Resolution is atomic per Update File section. Later hunks cannot match earlier hunk output; dependent edits require a later Update File section.
-- The tie-breaker is always enabled for every selector type. Order-assisted resolution is recorded in audit details without a warning, and unresolved groups receive group-level diagnostics.
+- The tie-breaker is always enabled for every selector type. Source-order resolution is recorded in `orderResolution` audit details without a warning, and unresolved groups receive group-level diagnostics.

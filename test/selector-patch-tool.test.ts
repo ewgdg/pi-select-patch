@@ -89,6 +89,16 @@ const detailsSelectorEfficiency = (
       selectorEfficiency: { patchChars: number; baselineChars: number };
     }
   ).selectorEfficiency;
+const detailsHunkAudits = (
+  result: Awaited<ReturnType<typeof smartPatchTool.execute>>,
+) => (
+  result.details as {
+    files: Array<{ audit?: { hunkAudits: Array<Record<string, unknown>> } }>;
+  }
+).files[0]?.audit?.hunkAudits ?? [];
+const expectNoSourceOrderWarning = (text: string) => {
+  expect(text).not.toMatch(/\b(?:source[- ]order|order[- ]resolution)\b/i);
+};
 const patchParameterDescription = () => {
   const parameters = smartPatchTool.parameters as {
     properties: { patch: { description?: string } };
@@ -313,6 +323,78 @@ describe("edit visible status", () => {
     expect(resultText(dryRunResult)).toContain("Validated");
     expect(resultText(dryRunResult)).toContain("WARNING: Hunk 1 used tolerated outside match");
     await expect(readFile(file, "utf8")).resolves.toBe("target");
+  });
+
+  it("keeps source-order resolution quiet while exposing bounded audit metadata", async () => {
+    const patch = [
+      "*** Update File: file.txt",
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second",
+    ].join("\n");
+    const statusDir = await makeExplicitTempDir();
+    await writeFile(join(statusDir, "file.txt"), "a\nx\nb\na\nx\nb");
+    const statusResult = await explicitPatchTool.execute(
+      "tool-call", { patch }, undefined, undefined, { cwd: statusDir } as never,
+    );
+    const expectedOrderResolutions = [
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 1, endLine: 2 } },
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 5, endLine: 6 } },
+    ];
+    expect(resultText(statusResult)).toBe("*** Update File: file.txt\nApplied");
+    expectNoSourceOrderWarning(resultText(statusResult));
+    expect(detailsHunkAudits(statusResult).map((audit) => audit.orderResolution)).toEqual(expectedOrderResolutions);
+
+    const hashDir = await makeExplicitTempDir();
+    await writeFile(join(hashDir, "file.txt"), "a\nx\nb\na\nx\nb");
+    const hashResult = await explicitPatchTool.execute(
+      "tool-call", { patch, receipt: "hash" }, undefined, undefined, { cwd: hashDir } as never,
+    );
+    expectNoSourceOrderWarning(resultText(hashResult));
+    expect(detailsHunkAudits(hashResult).map((audit) => audit.orderResolution)).toEqual(expectedOrderResolutions);
+
+    const dryRunDir = await makeExplicitTempDir();
+    const dryRunFile = join(dryRunDir, "file.txt");
+    await writeFile(dryRunFile, "a\nx\nb\na\nx\nb");
+    const dryRunResult = await explicitPatchTool.execute(
+      "tool-call", { patch, dry_run: true }, undefined, undefined, { cwd: dryRunDir } as never,
+    );
+    expect(resultText(dryRunResult)).toBe("*** Update File: file.txt\nValidated");
+    expectNoSourceOrderWarning(resultText(dryRunResult));
+    expect(detailsHunkAudits(dryRunResult).map((audit) => audit.orderResolution)).toEqual(expectedOrderResolutions);
+    await expect(readFile(dryRunFile, "utf8")).resolves.toBe("a\nx\nb\na\nx\nb");
+  });
+
+  it("keeps tolerated-boundary warnings unchanged when they order-resolve a following hunk", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    await writeFile(file, "target\nmarker\ntarget");
+
+    const result = await tolerantExplicitPatchTool.execute(
+      "tool-call",
+      {
+        patch: [
+          "*** Update File: file.txt",
+          "@@ @3", "-:marker", "+moved",
+          "@@", "-:target", "+selected",
+        ].join("\n"),
+      },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toBe([
+      "*** Update File: file.txt",
+      "Applied",
+      "WARNING: Hunk 1 used tolerated outside match (authored anchor 3...EOF; resolved lines 2...2).",
+    ].join("\n"));
+    expect(detailsHunkAudits(result)[0]?.orderResolution).toBeUndefined();
+    expect(detailsHunkAudits(result)[1]?.orderResolution).toEqual({
+      groupStartHunk: 2,
+      groupEndHunk: 2,
+      selectedSpan: { startLine: 3, endLine: 3 },
+    });
+    await expect(readFile(file, "utf8")).resolves.toBe("target\nmoved\nselected");
   });
 
   it("applies patch input starting at the file operation section", async () => {
@@ -1364,6 +1446,27 @@ describe("edit visible status", () => {
     );
   });
 
+  it("keeps partial-operation summaries quiet after source-order resolution", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "one.txt");
+    await writeFile(file, "a\nx\nb\na\nx\nb");
+    const patch = [
+      "*** Update File: one.txt",
+      "@@", "-:a", "-:x", "+first",
+      "@@", "-:x", "-:b", "+second",
+      "*** Add File: missing-parent/two.txt",
+      "+second",
+    ].join("\n");
+
+    const message = await rejectionMessage(
+      explicitPatchTool.execute("tool-call", { patch }, undefined, undefined, { cwd: dir } as never),
+    );
+
+    expect(message).toContain("Applied:\n*** Update File: one.txt");
+    expectNoSourceOrderWarning(message);
+    await expect(readFile(file, "utf8")).resolves.toBe("first\nb\na\nsecond");
+  });
+
   it("keeps tolerated-match warnings in partial-patch failures", async () => {
     const dir = await makeExplicitTempDir();
     await writeFile(join(dir, "one.txt"), "target");
@@ -1708,6 +1811,36 @@ describe("edit visible status", () => {
     );
     expect(resultText(result)).not.toContain("line-1");
     await expect(readFile(file, "utf8")).resolves.toBe(manyLines.join("\n"));
+  });
+
+  it("keeps compact receipt fallback quiet after source-order resolution", async () => {
+    const dir = await makeExplicitTempDir();
+    const file = join(dir, "file.txt");
+    const inserted = Array.from({ length: 2100 }, (_, index) => `+line-${index}`);
+    await writeFile(file, "a\nx\nb\na\nx\nb");
+
+    const result = await explicitPatchTool.execute(
+      "tool-call",
+      {
+        patch: [
+          "*** Update File: file.txt",
+          "@@", "-:a", "-:x", ...inserted,
+          "@@", "-:x", "-:b", "+second",
+        ].join("\n"),
+        receipt: "hash",
+      },
+      undefined,
+      undefined,
+      { cwd: dir } as never,
+    );
+
+    expect(resultText(result)).toBe("*** Update File: file.txt\nApplied");
+    expectNoSourceOrderWarning(resultText(result));
+    expect(detailsHunkAudits(result).map((audit) => audit.orderResolution)).toEqual([
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 1, endLine: 2 } },
+      { groupStartHunk: 1, groupEndHunk: 2, selectedSpan: { startLine: 5, endLine: 6 } },
+    ]);
+    expect((result.details as { status: { omitReason?: string } }).status.omitReason).toBe("too_large");
   });
 
   it("keeps tolerated-match warnings when a hash receipt falls back to status", async () => {
