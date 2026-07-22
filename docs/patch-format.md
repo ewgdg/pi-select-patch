@@ -31,7 +31,7 @@ Files are UTF-8 text. UTF-8 BOM is preserved for updates. Original first newline
 
 ## Universal patch
 
-Preferred `patch` input carries existing file paths in file operation sections. The tool accepts either inline `patch` text or `patch_file`; provide exactly one. `patch_file` paths resolve against the tool cwd; file paths inside the patch also resolve against cwd, not the patch file directory. Legacy `*** Begin Patch` / `*** End Patch` outer boundaries are accepted only as a matching outer pair; preferred input omits them.
+The tool accepts either inline `patch` text or `patch_file`; provide exactly one. `patch_file` paths resolve against the tool cwd; file paths inside the patch also resolve against cwd, not the patch file directory. Optional Codex-style `*** Begin Patch` / `*** End Patch` outer boundaries are accepted only as a matching pair; preferred input omits them.
 
 ```diff
 *** Update File: existing.txt
@@ -51,15 +51,15 @@ Preferred `patch` input carries existing file paths in file operation sections. 
  :end context text
 ```
 
-Prompted section header:
+Supported section header:
 
 - `*** Update File: path`
 
-Use the built-in `write` tool for new files. `*** Delete File: path` is rejected. Use an explicit shell command for whole-file deletion when needed.
+Codex compatibility is limited to Update File input. Use the built-in `write` tool for new files. `*** Add File`, `*** Delete File`, and `*** Move to` are rejected; use the appropriate filesystem tool or command instead.
 
 Multiple operations may target the same path. File operations apply sequentially: earlier successful operations stay applied if a later non-dry operation fails, and later operations are skipped. During non-dry apply failures, the tool writes a retry patch by copying the authored failed operation plus skipped later operations, then includes its path in the error message. Parser failures write the raw malformed input as the retry patch so agents can fix it via `patch_file` without re-emitting the full patch. `dry_run: true` validates the full patch without writing.
 
-File publication uses an internal direct-write backend shared with `replace`. Existing files are direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where supported. New files are direct-created exclusively and never overwrite an existing target. The default backend does not publish through temporary files, hard links, or renames, and existing-file replacement does not require write permission on the parent directory. Publication is not atomic: a failed write may leave an existing target partially written or truncated, so reread it before retrying. Backend selection is not exposed through tool input or configuration.
+File publication uses an internal direct-write backend shared with `replace`. Existing files are direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where supported. The default backend does not publish through temporary files, hard links, or renames, and existing-file replacement does not require write permission on the parent directory. Publication is not atomic: a failed write may leave an existing target partially written or truncated, so reread it before retrying. Backend selection is not exposed through tool input or configuration.
 
 Patch calls can set `receipt`. `profile` is configuration, not a patch parameter.
 
@@ -92,36 +92,60 @@ Update sections use selector hunks:
  :end context text
 ```
 
+Codex-style locator syntax is accepted. These forms both insert after the first viable closing line following `inspectRequest`:
+
+```diff
+*** Update File: existing.ts
+@@ inspectRequest(owner
+   }
++  inspectRequestProjection() {}
+```
+
+```diff
+*** Begin Patch
+*** Update File: existing.ts
+@@
+   inspectRequest(owner
+@@
+   }
++  inspectRequestProjection() {}
+*** End Patch
+```
+
+The first form uses an inline locator. The second uses a context-only locator hunk. Both participate in the same complete forward-chain search.
+
 Rules:
 
-- Hunk header must be `@@`, `@@ @<line>`, or `@@ @<start>...<end>`. In strict anchor mode, `@@ @<line>` requires the resolved match start to be at or after 1-based line `<line>` and `@@ @<start>...<end>` requires the complete resolved span to stay within the inclusive range. A stale strict anchor may report a unique whole-file match as an outside-anchor diagnostic, but never applies it. In tolerant anchor mode, candidates are classified by complete resolved span as contained, overlapping, or outside. Resolution uses the first non-empty class in that order; ambiguity in that active class is terminal. A lower-bound anchor extends through EOF. Overlapping and outside applications produce a visible warning; contained and unanchored applications remain ordinary.
+- Hunk header must be `@@`, `@@ <inline locator>`, `@@ @<line>`, or `@@ @<start>...<end>`. Inline locators use smart text matching in every profile. They search at or after the incoming chain cursor, advance matching past the selected locator line, and do not modify or reserve that line. Numeric line anchors retain their existing strict or tolerant semantics within the forward-eligible suffix. A lower-bound anchor extends through EOF. Tolerated overlapping and outside applications produce a visible warning; contained and unanchored applications remain ordinary.
+- `*** End of File` may follow the final body row of a hunk. It requires that hunk's selected source span to end at EOF and is not inserted content.
 - No source/destination diff ranges, duplicate counters, perfect hashes, or fuzzy anchors.
 - In explicit profile, context/delete rows use `<operator><selector>` syntax. The operator is the leading row action: space or omitted for context, `-` for delete, `+` for literal insert content, and `/old`/`=new` pairs for replacement inside the previous context-selected line. The selector is the match payload after the context/delete operator: `:<text>`, `^<prefix>`, `*<needle>`, `?{...}`, `$<suffix>`, `~<text>`, hash-enabled `#<hash>`, or `...` range. A matcher / match row is operator plus selector. Forms: ` :<text>` / `-:<text>` = exact context/delete text, ` ^<prefix>` / `-^<prefix>` = prefix context/delete text, ` *<needle>` / `-*<needle>` = contains context/delete text, ` ?{...}` / `-?{...}` = combined context/delete text, ` $<suffix>` / `-$<suffix>` = suffix context/delete text, ` ~<text>` / `-~<text>` = opt-in smart context/delete text, hash-enabled ` #<hash>` / `-#<hash>` = hash context/delete (1 to 4 base64url characters), ` ...` = skipped context range, `-...` = delete range. Insert rows use `+<content>` and have no selector; `+~literal` inserts `~literal`. Replace pairs use raw text after `/` and `=` and do not consume a target line.
   In configured `profile: "hash"`, allowed update hunk rows are only hash context/delete selectors (` a`, `-b3`), ranges (` ...`, `-...`), literal inserts (`+literal`), and `/old`/`=new` replace pairs after context rows. `#` hash markers and text selectors are rejected.
   In explicit profile, context selector rows may start with a literal space, or omit it before an explicit selector marker. For example, `^prefix` is equivalent to ` ^prefix`, `~target text` is equivalent to ` ~target text`, and `...` is equivalent to ` ...`. Use ` :` or `:` for exact text, including indented lines and literal leading `#` text. Smart profile treats context rows as smart text after the leading space operator and delete rows as smart text after `-`; marker-looking selector text is literal. A blank hunk row always means an empty context line.
 - Combined selector JSON (` ?{...}` / `-?{...}`) must be an object with only `prefix`, `contains`, and `suffix`; at least one key is required. `prefix`/`suffix` must be non-empty strings. `contains` may be a non-empty string or non-empty array of non-empty strings. All supplied predicates must match the same line.
-- Smart selectors in explicit profile (` ~<text>` / `-~<text>`, plus omitted-space context `~<text>`) and smart profile selector rows resolve independently to their strongest line-level match: exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Fixed explicit selectors in the same hunk keep their normal predicate. Prefix/suffix have the same rank, but audit records the actual resolved kind. The whole hunk applies only when dominance leaves one non-dominated candidate; tradeoffs or equal score vectors are ambiguous, and zero candidates are stale. Character subsequence is the weakest tier and only runs for useful non-whitespace query length.
+- Smart selectors in explicit profile (` ~<text>` / `-~<text>`, plus omitted-space context `~<text>`) and smart profile selector rows rank forward-eligible line matches by exact, prefix/suffix, contains, whitespace token-subsequence, bounded fuzzy token-subsequence, then character subsequence. Fixed explicit selectors in the same hunk keep their normal predicate. Prefix/suffix have the same rank, and audit records the resolved kind. Equal or Pareto-incomparable strongest candidates remain available to complete-chain search. Candidates dominated at the same cursor do not return in that search state; backtracking to a different cursor recomputes dominance within the new suffix. Character subsequence is the weakest tier and only runs for useful non-whitespace query length.
 - Each context/delete selector row consumes exactly one target line. Adjacent selector rows must match adjacent target lines unless separated by a range row. Do not add separate keyword locator rows for the same physical line; shorten the selector row itself instead.
 - Do not use hash-line read output rows (`HASH│content`) as patch operations. Insert operations contain literal content directly after `+` (`+new text`). Do not include hashes in `+` lines unless those hash characters are intended file content.
 - ` ...` preserves every target line between the nearest surrounding context/delete operations while avoiding long context in the patch.
 - `-...` deletes every target line between the nearest surrounding context/delete operations. Add `+` lines after it to replace that range. Surrounding delete operations also anchor the sparse range, then delete their matched endpoint lines.
-- Hunks without ellipsis produce contiguous candidate spans; hunks with ellipsis produce sparse candidate spans. A hunk applies only when its strongest candidate set resolves uniquely, either directly or through its local ambiguity group.
+- Hunks without ellipsis produce contiguous candidate spans; hunks with ellipsis produce sparse candidate spans. Equal strongest candidates remain available for earliest complete forward-chain selection. When candidate starts tie, the earlier end line wins, so the shortest equally strong forward span is preferred.
 - Update File sections use the whole-section resolution contract described below.
-- Pure insertion has empty match sequence and is supported only when target file has zero logical lines; hunk anchor hints are rejected on pure insert hunks because there is no resolved match start.
+- A context-only hunk is a locator hunk: it advances the chain cursor without modifying or reserving source lines. It must be followed by a mutating hunk in the same Update File section; a trailing locator hunk is invalid.
+- An insertion-only hunk in a nonempty file requires an established insertion position from an earlier matched hunk, a context-only locator hunk, or its own inline locator. The section's initial beginning-of-file cursor is only a search position, not an insertion position. A numeric line anchor alone does not establish an insertion position and is rejected on an insertion-only hunk. Pure insertion into an empty file remains supported.
 
 ### Whole-section resolution
 
-Every hunk in one `Update File` section resolves against the same immutable pre-edit source before any output materializes. The evidence hierarchy is always: anchor affinity, selector dominance, conflict-free assignment validity, then source-order tie-breaking. Exact, hash, prefix, suffix, contains, combined, unified-diff, and smart selectors all use this contract wherever their syntax is accepted. Explicit, smart, and hash profiles expose the same ambiguity semantics; there is no mode or profile switch for the tie-breaker.
+Every hunk in one `Update File` section resolves as an authored forward chain against the same immutable pre-edit source before output materializes. The section search cursor starts at the beginning of that source; this initial value does not by itself establish a nonempty-file insertion position. A later `Update File` section starts a new chain against the file state produced by earlier sections, so dependent edits belong in separate sections.
 
-Anchor affinity and selector dominance produce each hunk's **strongest candidate set**. A hunk with one strongest candidate is fixed, even when its source position differs from authored hunk order. Consecutive hunks with tied strongest candidates form an **ambiguity group** and resolve jointly, using the nearest fixed hunks before and after the group as optional boundaries. Candidates removed by stronger evidence never return to avoid a conflict or satisfy order.
+For each chain position, candidate discovery considers only source at or after the incoming cursor. An inline locator is matched first and advances the hunk's body search past its selected line. Among forward-eligible body candidates, resolution applies line-anchor affinity and then selector dominance. Candidates dominated at the same cursor never return merely to complete the chain. Backtracking to a different cursor recomputes forward eligibility and selector dominance within that new suffix.
 
-Ordering and conflict checks use each candidate's **complete source span**, from its first consumed source line through its last consumed or ranged source line. This gives contiguous and sparse hunks the same semantics. Adjacent spans are valid. Overlapping or nested spans create a **hunk conflict** and cannot share one assignment, including overlaps with fixed hunks or earlier resolved groups.
+A complete chain assigns every authored hunk a forward source position and contains no overlapping mutating source spans. Locator spans advance the cursor but do not reserve or modify source. Contiguous and sparse mutating hunks use their complete source spans, from first consumed line through last consumed or ranged line; adjacency is valid.
 
-If no conflict-free complete assignment exists, the section fails with `[E_CONFLICTING_HUNKS]`. If exactly one exists, it applies regardless of source order. If several exist, the source-order tie-breaker selects only when exactly one complete assignment follows authored hunk order and its usable boundaries; zero or several source-ordered assignments remain `[E_AMBIGUOUS_HUNK]`. Candidate discovery and group solving are bounded, but an exhausted search fails as `[E_HUNK_CANDIDATE_LIMIT]`; truncated candidates never prove uniqueness.
+Complete-chain search orders candidates lexicographically by source start and then source end for each authored hunk. It selects the earliest complete chain, backtracking when an earlier candidate prevents a later hunk from resolving. This applies to single-hunk sections too: if `-x` has several equally strong matches, the first forward `x` is selected. Sparse candidates with the same start prefer the earliest end.
 
-Resolved hunks materialize in **authored application order**, regardless of their source positions. Audits, transcripts, and selected spans retain pre-edit source coordinates. Source-order-assisted hunks receive bounded `orderResolution` audit metadata without a visible warning. A hunk cannot match output inserted by an earlier hunk in the same section; put dependent edits in a later `Update File` section.
+A branch with no forward-eligible candidate is abandoned and complete-chain search backtracks. If a hunk has no source candidate under its selector and anchor rules, the section fails as `[E_STALE_HUNK]`. If candidates exist but none form a complete forward, non-overlapping assignment, the section fails as `[E_FORWARD_CHAIN]` with bounded candidate spans and the first impossible chain position. Candidate discovery and complete-chain search remain bounded; exhausted search fails as `[E_HUNK_CANDIDATE_LIMIT]` and never chooses from truncated evidence.
 
-Author hunks in source order when practical so tied candidates can use positional evidence. This is guidance, not a positional requirement: uniquely resolved hunks may still apply when their source positions differ from authored order.
+Mutating hunks materialize in authored order. Locator-only hunks do not materialize. Audits, transcripts, and selected spans retain pre-edit source coordinates; forward selection is recorded in bounded `forwardResolution` metadata without a model-visible warning. A hunk cannot match output inserted by an earlier hunk in the same section.
 
 ### Blank line operations
 
@@ -179,7 +203,7 @@ With `profile: "hash"` or `receipt: "hash"`, `edit` success output is a compact 
 +Z9xQ
 ```
 
-Update receipts show hunk headers, surviving context line hashes, and inserted-line hashes. Deleted rows are omitted. Tolerated matches add a visible warning that names the affinity plus authored anchor and resolved span. If the receipt exceeds visible output limits, the tool falls back to compact status rows with `Applied` or `Validated` while preserving those warnings. With `receipt: "status"`, success output is compact status rows and any tolerated-match warnings.
+Update receipts show mutating hunk headers, surviving context line hashes, and inserted-line hashes. Deleted rows and locator-only hunks are omitted. Forward selection is quiet; tolerated matches still add a visible warning that names the affinity plus authored anchor and resolved span. If the receipt exceeds visible output limits, the tool falls back to compact status rows with `Applied` or `Validated` while preserving those warnings. With `receipt: "status"`, success output is compact status rows and any tolerated-match warnings.
 
 ## `details.diff`
 

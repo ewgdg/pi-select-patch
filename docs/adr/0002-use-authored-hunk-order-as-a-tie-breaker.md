@@ -1,4 +1,10 @@
+---
+status: superseded by ADR-0003
+---
+
 # Use authored hunk order as a match tie-breaker
+
+**Superseded by ADR-0003. The behavior below is historical and is not an available compatibility mode.**
 
 Within one Update File section, resolve every hunk against the same pre-edit source. After anchor affinity and selector dominance produce each hunk's strongest candidate set, resolve consecutive ambiguity groups jointly: discard overlapping assignments, use the nearest uniquely resolved hunks as optional boundaries, and select an assignment by authored source order only when exactly one ordered assignment remains. This increases safe application success without letting implicit position override stronger match evidence or silently choose among unresolved alternatives.
 

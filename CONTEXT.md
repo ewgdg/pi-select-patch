@@ -1,6 +1,6 @@
 # Select Patch
 
-Select Patch applies concise, uniquely targeted text changes while preserving explicit author constraints.
+Select Patch applies concise text changes using selectors, explicit constraints, and authored forward order.
 
 ## Language
 
@@ -24,20 +24,32 @@ _Avoid_: Retry match, fallback match, out-of-bound match
 **Whole-section resolution**:
 Resolution of every hunk in an Update File section against the same pre-edit source before any section edit applies.
 
-**Source-order tie-breaker**:
-A secondary resolution rule over the strongest candidate set that prefers assignments whose complete source spans follow authored hunk order. One span follows another when the earlier span ends before the later span begins; adjacency is allowed. It resolves a tie only when exactly one source-ordered assignment remains; zero or multiple source-ordered assignments remain ambiguous. It does not override a uniquely dominant match.
+**Forward-chain resolution**:
+A resolution policy that selects the earliest complete, source-ordered, non-overlapping assignment from cursor-relative strongest candidate sets. Authored hunk order forms a forward search chain over the pre-edit source.
 
-**Ambiguity group**:
-One or more consecutive hunks whose strongest match evidence leaves tied candidates. The group is resolved jointly using authored source order and the nearest uniquely resolved hunks before and after it as optional positional boundaries.
+**Chain cursor**:
+The earliest source position eligible for the next authored hunk. It starts at the beginning of an Update File section and advances past each selected locator or hunk span.
+
+**Forward span order**:
+The lexicographic ordering of complete hunk spans by start line and then end line, compared in authored hunk order. It defines the earliest complete forward chain.
+
+**Forward eligibility**:
+A candidate is forward eligible when its complete source span starts at or after the current chain cursor. Anchor affinity and selector dominance compare only forward-eligible candidates.
+
+**Inline locator**:
+Text authored on a hunk header that advances forward-chain search without modifying or reserving the matched source line.
+
+**Locator hunk**:
+A context-only hunk that advances forward-chain search without producing an edit. A locator hunk must be followed by a mutating hunk in the same Update File section.
 
 **Strongest candidate set**:
-The hunk candidates remaining after anchor affinity and selector dominance are applied. Conflict filtering and source-order tie-breaking operate only on this set, regardless of selector type.
+The hunk candidates remaining after forward eligibility, anchor affinity, and selector dominance are applied at one chain cursor. Backtracking to a different cursor recomputes this set.
 
 **Authored application order**:
-The order in which resolved hunks from an Update File section apply, matching their order in the patch regardless of their source positions.
+The order in which a selected forward chain materializes, matching hunk order in the patch.
 
 **Hunk conflict**:
-An overlap between the complete source spans assigned to two hunks in the same Update File section. A hunk conflict invalidates the section regardless of selector dominance or authored order.
+An overlap between source spans assigned to mutating hunks in the same Update File section. A complete forward chain cannot contain a hunk conflict.
 
 **Replace tool**:
 A top-level editing operation for substituting literal text in one file without expressing complete replacement lines.

@@ -4,11 +4,11 @@ Pi extension for exact literal replacements and token-efficient selector edits.
 
 File edits by coding agents often spend more tokens repeating unchanged code than describing the change. `pi-select-patch` exists to cut that waste.
 
-Design goal: make the smallest patch that still identifies one exact place. Agents should send only the useful anchors and changed lines, not copy whole functions for context.
+Design goal: make the smallest patch that still describes the intended forward edit sequence. Agents should send only useful locators, selectors, and changed lines, not copy whole functions for context.
 
 Smart profile is the default and intended way to use the extension. Its selectors can be short, sampled pieces of a target line. The matcher works out whether each piece is an exact match, prefix, suffix, contained text, token subsequence, fuzzy token subsequence, or character subsequence.
 
-Short does not mean loose. A hunk applies only when its selectors identify one winner. Ambiguous or stale patches fail instead of guessing.
+Short does not mean unstructured. Selector strength still outranks position, while authored hunk order supplies a Codex-compatible forward search chain for repeated matches.
 
 ## Smart selectors
 
@@ -23,7 +23,7 @@ Patch rows retain familiar diff operators:
 - `-...` deletes the range between surrounding selectors.
 - `/old` followed by `=new` replaces text inside the previous matched line.
 
-Selector text does not need a match-type marker. Start with the shortest readable fragment likely to identify the line. Add another selector, more text, or a line-range hint only when needed to remove ambiguity.
+Selector text does not need a match-type marker. Start with the shortest readable fragment that expresses the intended target. Add another selector, more text, or a line-range constraint when stronger evidence is useful.
 
 ```diff
 *** Update File: src/config.ts
@@ -42,7 +42,7 @@ Smart matching tries stronger interpretations before weaker ones:
 5. bounded fuzzy token subsequence
 6. character subsequence
 
-Each row resolves independently. The whole hunk must still have one unambiguous match.
+Each row resolves independently within the source suffix available at that chain position. Equal strongest hunk matches remain available for earliest complete forward-chain selection.
 
 ## Token-saving toolbox
 
@@ -142,25 +142,26 @@ File operations:
 
 Hunk headers:
 
-- `@@` searches whole file.
+- `@@` starts or continues the authored forward chain.
+- `@@ <text>` smart-matches an inline locator before resolving that hunk's body.
 - `@@ @<line>` and `@@ @<start>...<end>` use strict hard boundaries by default.
-- Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to recover unique overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
+- Set global `pi-select-patch.anchorMode` to `"tolerant"` (or `PI_SELECT_PATCH_ANCHOR_MODE=tolerant`) to consider overlapping or outside matches hierarchically. Every tolerated application emits a warning with its anchor and resolved span.
 
-Each `Update File` section uses **whole-section resolution**: every hunk resolves against one immutable pre-edit source before output materializes. Anchor affinity and selector dominance first produce each hunk's **strongest candidate set**. Consecutive tied hunks form an **ambiguity group**, which is solved from complete source spans rather than only each match's first line. Assignments that overlap another resolved span are **hunk conflicts** and are rejected.
+Each `Update File` section resolves against one immutable pre-edit source as an authored forward chain. The cursor begins at the start of the file. For each hunk, candidates before the cursor are ineligible; line-anchor affinity and selector dominance then rank the remaining candidates.
 
-If one conflict-free assignment remains, it applies regardless of source order. If several remain, authored source order is only a tie-breaker and succeeds only when exactly one complete assignment follows the hunk sequence; zero or several ordered assignments remain ambiguous. Candidate limits fail explicitly instead of treating a truncated search as unique. Resolved hunks then materialize in **authored application order**, even when uniquely resolved source positions differ from that order, and cannot match output inserted by an earlier hunk. Use another `*** Update File` section when a later edit must depend on earlier output.
+The resolver selects the earliest complete, non-overlapping chain, backtracking when an early candidate prevents later hunks from resolving. Equal starts prefer the earlier end line. This applies to single hunks as well as multi-hunk locator chains. Candidates dominated at the same cursor never return merely to make a chain succeed; backtracking to a different cursor recomputes selector strength within that new suffix.
 
-Author hunks in source order when practical so repeated matches provide useful positional evidence. This is a recommendation, not a syntax rule: uniquely resolved hunks may still apply when their source positions differ from authored order.
+Context-only hunks act as locators and must lead to a later mutation. A hunk cannot match output inserted by an earlier hunk in the same section; use another `*** Update File` section for dependent edits.
 
 ## Failure behavior
 
-Zero matches mean patch is stale. Multiple equally valid matches mean patch is ambiguous. A local ambiguity group with no non-overlapping complete assignment fails as conflicting hunks (`[E_CONFLICTING_HUNKS]`). Candidate or ambiguity-search limits fail explicitly as `[E_HUNK_CANDIDATE_LIMIT]`; limits never choose from a truncated set. All failures leave that operation unchanged.
+A search branch with no forward-eligible candidate is abandoned and the resolver backtracks. A hunk with no source candidate under its selector and anchor rules fails as `[E_STALE_HUNK]`; candidates that exist but cannot form a complete forward non-overlapping chain fail as `[E_FORWARD_CHAIN]`. Candidate or chain-search limits fail explicitly as `[E_HUNK_CANDIDATE_LIMIT]`; limits never choose from truncated evidence. All failures leave that operation unchanged.
 
 File operations apply sequentially. If a later operation fails, earlier successful operations remain applied and later operations are skipped. Error includes a retry patch containing failed and skipped operations, avoiding need to resend whole original patch.
 
 Dry runs validate and return normal receipt shape without writing.
 
-`edit` and `replace` publish complete text through the same internal default backend. Existing files are opened and direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where the platform exposes them. New files are direct-created exclusively so publication never overwrites an existing target. Publication does not use temporary files, hard-link publication, or rename publication, and replacing an existing file does not require write permission on its parent directory.
+`edit` and `replace` publish complete text through the same internal default backend. Existing files are opened and direct-written in place after symlink resolution, preserving the symlink and the target's mode, inode identity, and hard links where the platform exposes them. Publication does not use temporary files, hard-link publication, or rename publication, and replacing an existing file does not require write permission on its parent directory.
 
 Publication is not atomic. A failed existing-file write may leave the target partially written or truncated; reread the file before retrying. The backend is internal and has no tool parameter, setting, or environment-variable selector.
 
